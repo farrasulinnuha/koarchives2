@@ -1,0 +1,18 @@
+# Vercel
+.vercel
+
+# Dependensi (proyek ini tidak butuh, tapi jaga-jaga)
+node_modules/
+
+# Berkas sampah sistem
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Jangan sampai bundel mentah atau cadangan ikut ter-commit
+*.bundel.txt
+arsip-koas-*.json
+tracker-ipk-*.json

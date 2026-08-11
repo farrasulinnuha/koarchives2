@@ -1,0 +1,12 @@
+{
+  "name": "arsip-koas",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Arsip belajar koas: materi, outline, dan latihan soal per stase, lengkap dengan tracker IPK pribadi.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "python3 -m http.server 8000"
+  }
+}
