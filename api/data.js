@@ -163,25 +163,20 @@ async function bacaArsip() {
 
 /* Yang dikirim ke klien disaring di server. Materi terbatas tidak pernah
    meninggalkan server untuk akun yang tidak berhak. */
-function saringUntuk(arsip, akun) {
+function bolehLihat(e, akun) {
+  if (!e) return false;
   var peran = akun ? akun.peran : "";
   var tingkat = akun ? akun.tingkat : "publik";
-  var semua = arsip.entri || [];
-  var terlihat;
+  if (peran === "pemilik") return true;
+  if (e.status !== "terbit" && !(peran === "kontributor" && e.penulis === akun.pengguna)) return false;
+  if (tingkat !== "penuh" && e.akses !== "publik") return false;
+  return true;
+}
 
-  if (peran === "pemilik") {
-    terlihat = semua;
-  } else if (peran === "kontributor") {
-    terlihat = semua.filter(function (e) {
-      return e.status === "terbit" || e.penulis === akun.pengguna;
-    });
-  } else {
-    terlihat = semua.filter(function (e) { return e.status === "terbit"; });
-  }
-
-  if (peran !== "pemilik" && tingkat !== "penuh") {
-    terlihat = terlihat.filter(function (e) { return e.akses === "publik"; });
-  }
+function saringUntuk(arsip, akun) {
+  // Satu sumber kebenaran dengan bolehLihat(), supaya izin daftar arsip dan
+  // izin lampiran tidak bisa berbeda diam-diam.
+  var terlihat = (arsip.entri || []).filter(function (e) { return bolehLihat(e, akun); });
   return Object.assign({}, arsip, { entri: terlihat });
 }
 
@@ -209,6 +204,16 @@ function bersihEntri(e, akun) {
     tanggal: String(e.tanggal || new Date().toISOString().slice(0, 10)),
     tag: Array.isArray(e.tag) ? e.tag.map(String).slice(0, 20) : [],
     sumber: String(e.sumber || "").slice(0, 500),
+    lampiran: Array.isArray(e.lampiran) ? e.lampiran.slice(0, 20).map(function (l) {
+      return {
+        id: String(l.id || ("l-" + acakHex(6))),
+        jenis: l.jenis === "berkas" ? "berkas" : "tautan",
+        judul: String(l.judul || "").slice(0, 200),
+        url: String(l.url || "").slice(0, 2000),
+        mime: String(l.mime || "").slice(0, 100),
+        ukuran: Number(l.ukuran) || 0
+      };
+    }) : [],
     isi: String(e.isi || ""),
     soal: soal,
     // Status dan penulis ditentukan server, bukan klien. Tanpa ini seorang
@@ -377,6 +382,51 @@ module.exports = async function handler(req, res) {
       // ikut arsip, bukan ember pribadi tiap akun.
       if (Array.isArray(b.agenda)) await simpan("arsip:agenda", b.agenda.slice(0, 500));
       return res.status(200).json({ status: "tersimpan", arsip: saringUntuk(await bacaArsip(), akun) });
+    }
+
+    /* ---- lampiran berkas ----
+       Isi berkas disimpan di kunci sendiri, bukan di dalam arsip:entri.
+       Kalau digabung, tiap pemuatan halaman ikut menyeret semua PDF dan
+       gambar sekaligus, dan arsipnya jadi berat untuk semua orang. */
+    if (aksi === "lampiranSimpan") {
+      if (akun.peran !== "pemilik" && akun.peran !== "kontributor") {
+        return res.status(403).json({ galat: "Akun ini hanya boleh membaca." });
+      }
+      var dataL = typeof b.data === "string" ? b.data : "";
+      if (!dataL || !/^[A-Za-z0-9+/=]+$/.test(dataL)) {
+        return res.status(400).json({ galat: "Lampiran bukan base64 yang sah." });
+      }
+      if (dataL.length > 4300000) {
+        return res.status(400).json({ galat: "Berkasnya melebihi batas permintaan Vercel. Pakai tautan untuk berkas besar." });
+      }
+      var idL = String(b.id || "").slice(0, 64);
+      if (!/^[A-Za-z0-9_-]+$/.test(idL)) {
+        return res.status(400).json({ galat: "Nama lampiran tidak sah." });
+      }
+      await simpan("lampiran:" + idL, {
+        entriId: String(b.entriId || "").slice(0, 64),
+        nama: String(b.nama || "berkas").slice(0, 200),
+        mime: String(b.mime || "application/octet-stream").slice(0, 100),
+        data: dataL
+      });
+      return res.status(200).json({ status: "tersimpan", id: idL });
+    }
+
+    if (aksi === "lampiranAmbil") {
+      var idA = String(b.id || "").slice(0, 64);
+      if (!/^[A-Za-z0-9_-]+$/.test(idA)) {
+        return res.status(400).json({ galat: "Nama lampiran tidak sah." });
+      }
+      var lampA = await ambil("lampiran:" + idA, null);
+      if (!lampA) return res.status(404).json({ galat: "Lampiran tidak ditemukan." });
+      // Lampiran mewarisi izin entri induknya. Tanpa cek ini, tautan
+      // langsung ke lampiran jadi jalan pintas ke materi berbayar.
+      var arsipL = await bacaArsip();
+      var induk = (arsipL.entri || []).filter(function (x) { return x.id === lampA.entriId; })[0];
+      if (!bolehLihat(induk, akun)) {
+        return res.status(403).json({ galat: "Lampiran ini tidak terbuka untuk akunmu." });
+      }
+      return res.status(200).json({ nama: lampA.nama, mime: lampA.mime, data: lampA.data });
     }
 
     /* ---- kelola akun (pemilik) ---- */

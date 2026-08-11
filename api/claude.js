@@ -264,9 +264,13 @@ module.exports = async function handler(req, res) {
     }
     totalLampiran += data.length;
   }
-  if (totalLampiran > 3600000) {
+  // Vercel menolak badan permintaan di atas 4,5 MB sebelum kode ini jalan,
+  // jadi plafonnya ditaruh sedikit di bawah itu agar pesannya jelas dan
+  // bukan galat jaringan yang membingungkan.
+  if (totalLampiran > 4300000) {
     return res.status(400).json({
-      galat: "Lampiran terlalu besar. Kecilkan gambarnya atau kirim beberapa kali."
+      galat: "Total lampiran melebihi batas permintaan Vercel (4,5 MB). " +
+        "Kirim beberapa kali, atau pasang berkas besar sebagai tautan lampiran di entrinya."
     });
   }
 

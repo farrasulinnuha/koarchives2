@@ -940,6 +940,23 @@ body.berlatar .butir{opacity:.25}
 .nk-ragu{background:var(--tunggu);border-color:var(--tunggu);border-radius:100px}
 .skala-awas{margin:10px 0 0;padding:9px 12px;border-radius:11px;font-size:13px;font-weight:600;
   background:var(--tunggu-latar);color:var(--tunggu);border:1px solid var(--tunggu)}
+.lam-daftar{display:flex;flex-direction:column;gap:9px;margin-top:14px}
+.lam-baris{display:flex;align-items:center;gap:11px;width:100%;text-align:left;cursor:pointer;
+  padding:12px 14px;border-radius:13px;border:1px solid var(--garis);
+  background:rgba(var(--kaca),.55);color:var(--tinta);text-decoration:none;
+  font:600 14.5px/1.4 var(--f-teks);transition:transform .14s,box-shadow .14s}
+.lam-baris:hover{transform:translateY(-1px);box-shadow:0 7px 18px rgba(25,22,34,.11)}
+.lam-tanda{flex:none;padding:3px 9px;border-radius:100px;background:var(--a2);color:var(--atas-aksen);
+  font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
+.lam-nama{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+.lam-buka{flex:none;font-size:13px;font-weight:800;color:var(--a2)}
+.lam-video{position:relative;width:100%;aspect-ratio:16/9;border-radius:14px;overflow:hidden;
+  border:1px solid var(--garis);background:#000}
+.lam-video iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.lam-cap{margin:2px 0 0;font-size:13px;font-weight:700;color:var(--redup)}
+.lam-sunting{display:flex;flex-direction:column;gap:7px}
+.lam-sbaris{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:11px;
+  border:1px solid var(--garis);background:rgba(var(--kaca),.5);font-size:14px}
 .lampiran-daftar{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
 .lampiran-daftar:empty{display:none}
 .lampiran-cip{display:inline-flex;align-items:center;gap:7px;padding:5px 6px 5px 11px;
@@ -2798,8 +2815,11 @@ function viewDetail(){
     (e.sumber ? '<p style="margin:26px 0 0;padding-top:15px;border-top:1px solid var(--garis);font-size:12.5px;color:var(--redup)"><b style="letter-spacing:.07em;text-transform:uppercase;font-size:11px">Sumber</b><br>' + esc(e.sumber) + "</p>" : "") +
     "</section>";
 
+  h += bagianLampiran(e);
+
   panggung.innerHTML = h;
   pasangCari();
+  pasangLampiran(e);
 
   document.getElementById("balik").addEventListener("click", function(){ ui.view = "arsip"; ui.entriId = null; render(); });
   var m = document.getElementById("mulai");
@@ -3187,6 +3207,15 @@ function viewEditor(){
        '</span>';
   h += '<span id="fBerkasKabar" class="bantu" style="font-weight:700"></span></div>';
 
+  h += '<div class="b"><label>Lampiran &amp; tautan</label>';
+  h += '<div id="lamSunting" class="lam-sunting"></div>';
+  h += '<div class="kotak-aksi" style="margin-top:8px">';
+  h += '<button class="t" id="lamTautan" type="button">+ Tautan (YouTube, Drive, PDF)</button>';
+  h += '<button class="t" id="lamBerkas" type="button">+ Unggah berkas</button></div>';
+  h += '<span class="bantu">Tautan tidak ada batas ukuran \u2014 pakai ini untuk video YouTube, rekaman kuliah, dan PDF besar. Berkas yang diunggah dibatasi 3 MB karena batas permintaan Vercel, dan disimpan terpisah supaya arsip tetap ringan.</span>';
+  h += '<input type="file" id="lamInput" accept=".pdf,image/*" hidden>';
+  h += '<span id="lamKabar" class="bantu" style="font-weight:700"></span></div>';
+
   h += '<div class="b" id="kotakSoal"' + (e.tipe === "kuis" ? "" : ' style="display:none"') + '>';
   h += '<label for="fSoal">Soal</label>';
   h += '<textarea id="fSoal" class="mono" placeholder="1. Pertanyaan\u2026&#10;A. opsi&#10;B. opsi&#10;Jawaban: B&#10;Pembahasan: \u2026">' + esc(soalKeTeks(e.soal)) + "</textarea>";
@@ -3218,6 +3247,84 @@ function viewEditor(){
   fTipe.addEventListener("change", function(){
     kotakSoal.style.display = fTipe.value === "kuis" ? "" : "none";
   });
+
+  // Lampiran disunting di larik terpisah supaya batal-sunting tidak
+  // mengubah entri yang tersimpan.
+  var lamKerja = lampiranEntri(e).map(function(x){ return Object.assign({}, x); });
+
+  function gambarLamSunting(){
+    var kotak = document.getElementById("lamSunting");
+    if(!kotak) return;
+    if(!lamKerja.length){
+      kotak.innerHTML = '<p class="bantu" style="margin:0">Belum ada lampiran.</p>';
+      return;
+    }
+    kotak.innerHTML = lamKerja.map(function(l, i){
+      var tanda = l.jenis === "tautan" ? labelTautan(jenisTautan(l.url || "")) : "Berkas";
+      return '<div class="lam-sbaris"><span class="lam-tanda">' + esc(tanda) + "</span>" +
+             '<span class="lam-nama">' + esc(l.judul || l.url || "Berkas") + "</span>" +
+             '<button class="t kcl" type="button" data-lam-buang="' + i + '">Buang</button></div>';
+    }).join("");
+    Array.prototype.forEach.call(kotak.querySelectorAll("[data-lam-buang]"), function(b){
+      b.addEventListener("click", function(){
+        lamKerja.splice(Number(b.dataset.lamBuang), 1);
+        gambarLamSunting();
+      });
+    });
+  }
+  gambarLamSunting();
+
+  var btTautan = document.getElementById("lamTautan");
+  if(btTautan) btTautan.addEventListener("click", async function(){
+    var n = await dialog({
+      judul:"Tambah tautan", jenis:"borang", ok:"Tambahkan",
+      isi:'<label class="dl">Alamat (URL)</label>' +
+          '<input id="lamUrl" type="url" placeholder="https://youtube.com/watch?v=\u2026">' +
+          '<label class="dl">Nama tampilan (boleh kosong)</label>' +
+          '<input id="lamJudul" type="text" maxlength="200" placeholder="mis. Kuliah syok - dr. Andi">',
+      ambil: function(){
+        var u = urlAman(document.getElementById("lamUrl").value);
+        if(!u) return {galat:"Alamatnya harus dimulai dengan http:// atau https://"};
+        return {nilai:{url:u, judul:document.getElementById("lamJudul").value.trim()}};
+      }
+    });
+    if(!n) return;
+    lamKerja.push({id:idBaru("l"), jenis:"tautan", url:n.url,
+                   judul:n.judul || n.url, mime:"", ukuran:0});
+    gambarLamSunting();
+  });
+
+  var btBerkas = document.getElementById("lamBerkas");
+  var lamInput = document.getElementById("lamInput");
+  if(btBerkas && lamInput){
+    btBerkas.addEventListener("click", function(){ lamInput.click(); });
+    lamInput.addEventListener("change", async function(){
+      var kabar = document.getElementById("lamKabar");
+      var f = (lamInput.files || [])[0];
+      lamInput.value = "";
+      if(!f) return;
+      if(f.size > BATAS_UNGGAH){
+        kabar.textContent = "Berkasnya " + Math.round(f.size / 1048576 * 10) / 10 +
+          " MB, batasnya 3 MB. Unggah ke Google Drive lalu pasang tautannya \u2014 di situ tidak ada batas.";
+        kabar.style.color = "var(--buruk)";
+        return;
+      }
+      kabar.textContent = "Menyiapkan " + f.name + "\u2026";
+      kabar.style.color = "var(--redup)";
+      try{
+        var data = await base64Berkas(f);
+        lamKerja.push({id:idBaru("l"), jenis:"berkas", judul:f.name,
+                       mime:f.type || "application/octet-stream", ukuran:f.size,
+                       url:"", data:data, baru:true});
+        gambarLamSunting();
+        kabar.textContent = f.name + " siap. Tersimpan saat entrinya disimpan.";
+        kabar.style.color = "var(--baik)";
+      }catch(err){
+        kabar.textContent = err.message;
+        kabar.style.color = "var(--buruk)";
+      }
+    });
+  }
 
   var inpBerkasE = document.getElementById("fBerkas");
   if(inpBerkasE) inpBerkasE.addEventListener("change", async function(){
@@ -3266,6 +3373,14 @@ function viewEditor(){
       tanggal: document.getElementById("fTgl").value || hariIni(),
       tag: document.getElementById("fTag").value.split(",").map(function(t){ return t.trim(); }).filter(Boolean),
       sumber: document.getElementById("fSumber").value.trim(),
+      lampiran: lamKerja.map(function(l){
+        var salin = {id:l.id, jenis:l.jenis, judul:l.judul, url:l.url || "",
+                     mime:l.mime || "", ukuran:l.ukuran || 0};
+        // Di mode luring isinya ikut entri; di mode server isinya sudah
+        // diunggah tersendiri, jadi metadatanya saja yang disimpan.
+        if(l.jenis === "berkas" && !SERVER.ada && l.data) salin.data = l.data;
+        return salin;
+      }),
       isi: document.getElementById("fIsi").value,
       soal: soal,
       status: pemilik() ? "terbit" : "menunggu",
@@ -3274,6 +3389,18 @@ function viewEditor(){
     };
 
     if(SERVER.ada){
+      // Berkas baru diunggah lebih dulu; kalau ada yang gagal, entrinya
+      // tidak jadi disimpan supaya tidak menunjuk lampiran yang tidak ada.
+      for(var li = 0; li < lamKerja.length; li++){
+        var lb = lamKerja[li];
+        if(lb.jenis !== "berkas" || !lb.baru) continue;
+        var ju = await srv("lampiranSimpan", {
+          id:lb.id, entriId:obj.id, nama:lb.judul, mime:lb.mime, data:lb.data
+        });
+        if(ju.galat){ toast(ju.galat); return; }
+        lb.baru = false;
+        delete lb.data;
+      }
       var js = await srv("entriSimpan", {entri:[obj]});
       if(js.galat){ toast(js.galat); return; }
       pasangArsipServer(js.arsip);
@@ -3477,7 +3604,7 @@ function viewAlat(){
     h += '<span class="bantu">Batas sekali kirim sekitar 60 ribu karakter. Kalau materinya lebih panjang, potong jadi beberapa bagian.</span></div>';
     h += '<div class="b"><label for="berkasClaude">Atau ambil dari berkas</label>';
     h += '<input type="file" id="berkasClaude" multiple accept=".pptx,.docx,.pdf,.txt,.md,image/*">';
-    h += '<span class="bantu">PowerPoint dan Word dibaca jadi teks langsung di browser ini. PDF dan foto slide dikirim ke Claude untuk dibaca sendiri. Video belum bisa diproses \u2014 unggah slidenya, atau tempel tautannya di kolom Sumber entri.</span>';
+    h += '<span class="bantu">PowerPoint dan Word dibaca jadi teks langsung di browser ini. PDF (maks 3 MB) dan foto slide dikirim ke Claude untuk dibaca sendiri \u2014 batas itu datang dari Vercel, bukan dari Claude. Video tidak bisa diproses; kalau cuma mau disimpan dan ditonton, pasang sebagai lampiran tautan di entrinya.</span>';
     h += '<div id="berkasDaftar" class="lampiran-daftar"></div></div>';
     h += '<div class="b"><label for="staseClaude">Masuk ke stase</label><select id="staseClaude">';
     semuaStase().forEach(function(x){
@@ -3897,8 +4024,11 @@ async function bacaBerkasMateri(berkas){
     return {nama:nama, teks: await teksDariDocx(await berkas.arrayBuffer()), jenis:"Word"};
   }
   if(berkas.type === "application/pdf" || akhiran === "pdf"){
-    if(berkas.size > 3000000){
-      throw new Error("PDF-nya lebih dari 3 MB. Kirim per bab supaya muat.");
+    if(berkas.size > BATAS_UNGGAH){
+      throw new Error("PDF-nya " + (Math.round(berkas.size / 1048576 * 10) / 10) +
+        " MB, sedangkan badan permintaan Vercel dibatasi 4,5 MB \u2014 setelah dikodekan, " +
+        "berkas di atas 3 MB tidak akan pernah sampai. Kirim per bab, atau pasang " +
+        "sebagai tautan lampiran kalau memang tidak perlu dibaca Claude.");
     }
     return {nama:nama, jenis:"PDF",
             lampiran:{jenis:"pdf", mime:"application/pdf", data: await base64Berkas(berkas)}};
@@ -3913,6 +4043,116 @@ async function bacaBerkasMateri(berkas){
   }
   throw new Error("Jenis berkas ." + akhiran + " belum didukung. " +
     "Yang bisa: PPTX, DOCX, PDF, gambar, dan teks biasa.");
+}
+
+/* =====================================================================
+   11d. Lampiran entri: tautan (YouTube, Drive, PDF) dan berkas terunggah
+   ===================================================================== */
+
+/* Batas 4,5 MB pada badan permintaan Vercel adalah dinding keras: berkas
+   yang lebih besar tidak akan pernah sampai ke server, seberapa pun
+   longgar batas yang kita tulis di sini. Karena itu jalur utama untuk
+   video dan PDF besar adalah tautan, yang tidak punya batas sama sekali. */
+var BATAS_UNGGAH = 3200000;
+
+function idYoutube(url){
+  var m = String(url).match(
+    /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+  return m ? m[1] : null;
+}
+
+function jenisTautan(url){
+  if(idYoutube(url)) return "youtube";
+  if(/\.pdf($|\?)/i.test(url)) return "pdf";
+  if(/\.(png|jpe?g|gif|webp)($|\?)/i.test(url)) return "gambar";
+  if(/drive\.google\.com|docs\.google\.com/.test(url)) return "drive";
+  return "tautan";
+}
+
+function labelTautan(j){
+  return {youtube:"Video YouTube", pdf:"PDF", gambar:"Gambar", drive:"Google Drive", tautan:"Tautan"}[j] || "Tautan";
+}
+
+function urlAman(u){
+  var t = String(u || "").trim();
+  // Hanya http(s). Tanpa ini, javascript: dan data: di kolom tautan jadi
+  // celah XSS yang dipicu pembaca lain saat mengeklik lampiran.
+  if(!/^https?:\/\//i.test(t)) return null;
+  return t;
+}
+
+function lampiranEntri(e){
+  return Array.isArray(e.lampiran) ? e.lampiran : [];
+}
+
+/* Isi berkas hidup di kunci server sendiri. Cache di memori supaya membuka
+   entri yang sama dua kali tidak menarik ulang berkasnya. */
+var cacheLampiran = {};
+
+async function ambilLampiran(l){
+  if(l.data) return "data:" + l.mime + ";base64," + l.data;
+  if(cacheLampiran[l.id]) return cacheLampiran[l.id];
+  if(!SERVER.ada) return null;
+  var j = await srv("lampiranAmbil", {id:l.id});
+  if(j.galat || !j.data) return null;
+  cacheLampiran[l.id] = "data:" + j.mime + ";base64," + j.data;
+  return cacheLampiran[l.id];
+}
+
+function bagianLampiran(e){
+  var daftar = lampiranEntri(e);
+  if(!daftar.length) return "";
+  var h = '<section class="kotak kaca"><h2>Lampiran</h2><div class="lam-daftar">';
+  daftar.forEach(function(l){
+    if(l.jenis === "tautan"){
+      var u = urlAman(l.url);
+      if(!u) return;
+      var j = jenisTautan(u);
+      if(j === "youtube"){
+        h += '<div class="lam-video"><iframe src="https://www.youtube-nocookie.com/embed/' +
+             esc(idYoutube(u)) + '" title="' + esc(l.judul || "Video") +
+             '" allow="accelerometer; clipboard-write; encrypted-media; picture-in-picture" ' +
+             'referrerpolicy="strict-origin-when-cross-origin" allowfullscreen loading="lazy"></iframe></div>';
+        if(l.judul) h += '<p class="lam-cap">' + esc(l.judul) + "</p>";
+        return;
+      }
+      h += '<a class="lam-baris" href="' + esc(u) + '" target="_blank" rel="noopener noreferrer">' +
+           '<span class="lam-tanda">' + esc(labelTautan(j)) + "</span>" +
+           '<span class="lam-nama">' + esc(l.judul || u) + "</span>" +
+           '<span class="lam-buka">Buka</span></a>';
+      return;
+    }
+    h += '<button class="lam-baris" type="button" data-lam="' + esc(l.id) + '">' +
+         '<span class="lam-tanda">' + esc((l.mime || "").indexOf("image") === 0 ? "Gambar" : "PDF") + "</span>" +
+         '<span class="lam-nama">' + esc(l.judul || "Berkas") +
+         (l.ukuran ? " \u00B7 " + Math.round(l.ukuran / 1024) + " KB" : "") + "</span>" +
+         '<span class="lam-buka">Buka</span></button>';
+  });
+  h += "</div></section>";
+  return h;
+}
+
+function pasangLampiran(e){
+  Array.prototype.forEach.call(panggung.querySelectorAll("[data-lam]"), function(b){
+    b.addEventListener("click", async function(){
+      var l = lampiranEntri(e).filter(function(x){ return x.id === b.dataset.lam; })[0];
+      if(!l) return;
+      var asli = b.querySelector(".lam-buka").textContent;
+      b.querySelector(".lam-buka").textContent = "Memuat\u2026";
+      var durl = await ambilLampiran(l);
+      b.querySelector(".lam-buka").textContent = asli;
+      if(!durl){ toast("Lampirannya tidak bisa diambil."); return; }
+      // Blob URL, bukan data: URL panjang \u2014 Safari menolak data: URL
+      // besar di tab baru.
+      var bin = atob(durl.slice(durl.indexOf(",") + 1));
+      var buf = new Uint8Array(bin.length);
+      for(var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+      var blob = new Blob([buf], {type:l.mime || "application/octet-stream"});
+      var url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener");
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+    });
+  });
 }
 
 function imporJson(teks){
