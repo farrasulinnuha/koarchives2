@@ -219,13 +219,54 @@ module.exports = async function handler(req, res) {
   if (!akun || !verifikasi || !TUGAS[tugas]) {
     return res.status(400).json({ galat: "Permintaan tidak lengkap." });
   }
-  if (!materi.trim()) {
+  var adaLampiran = Array.isArray(b.lampiran) && b.lampiran.length > 0;
+  if (!materi.trim() && !adaLampiran) {
     return res.status(400).json({ galat: "Materinya masih kosong." });
+  }
+  if (!materi.trim()) {
+    materi = "Susun dari berkas yang dilampirkan.";
   }
   if (materi.length > MAKS_MASUKAN) {
     return res.status(400).json({
       galat: "Materi terlalu panjang (" + Math.round(materi.length / 1000) + " ribu karakter, " +
         "batas " + Math.round(MAKS_MASUKAN / 1000) + " ribu). Potong jadi beberapa bagian."
+    });
+  }
+
+  /* Lampiran diperiksa sebelum apa pun dikirim ke Anthropic: hanya jenis
+     yang memang bisa dibaca model, dan totalnya harus muat di badan
+     permintaan Vercel. Video tidak pernah lolos \u2014 Messages API tidak
+     bisa menontonnya, dan menerimanya diam-diam cuma membuang kuota. */
+  var lampiran = Array.isArray(b.lampiran) ? b.lampiran : [];
+  if (lampiran.length > 8) {
+    return res.status(400).json({ galat: "Maksimal 8 lampiran sekali kirim." });
+  }
+  var MIME_GAMBAR = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+  var totalLampiran = 0;
+  for (var i = 0; i < lampiran.length; i++) {
+    var lp = lampiran[i] || {};
+    var data = typeof lp.data === "string" ? lp.data : "";
+    if (!data) return res.status(400).json({ galat: "Ada lampiran tanpa isi." });
+    if (!/^[A-Za-z0-9+/=]+$/.test(data)) {
+      return res.status(400).json({ galat: "Lampiran bukan base64 yang sah." });
+    }
+    var mime = String(lp.mime || "");
+    if (lp.jenis === "gambar") {
+      if (MIME_GAMBAR.indexOf(mime) === -1) {
+        return res.status(400).json({ galat: "Jenis gambar tidak didukung: " + mime });
+      }
+    } else if (lp.jenis === "pdf") {
+      if (mime !== "application/pdf") {
+        return res.status(400).json({ galat: "Lampiran PDF salah jenis: " + mime });
+      }
+    } else {
+      return res.status(400).json({ galat: "Jenis lampiran tidak dikenal." });
+    }
+    totalLampiran += data.length;
+  }
+  if (totalLampiran > 3600000) {
+    return res.status(400).json({
+      galat: "Lampiran terlalu besar. Kecilkan gambarnya atau kirim beberapa kali."
     });
   }
 
@@ -246,6 +287,27 @@ module.exports = async function handler(req, res) {
     }
 
     var t = TUGAS[tugas];
+
+    // Lampiran: gambar (foto slide, papan tulis, halaman buku) dan PDF
+    // dibaca langsung oleh model. PPT dan Word sudah diubah jadi teks di
+    // sisi browser, jadi tidak pernah sampai ke sini sebagai berkas.
+    var isiPesan = [];
+    for (var li = 0; li < lampiran.length; li++) {
+      var lp = lampiran[li];
+      if (lp.jenis === "gambar") {
+        isiPesan.push({
+          type: "image",
+          source: { type: "base64", media_type: lp.mime, data: lp.data }
+        });
+      } else {
+        isiPesan.push({
+          type: "document",
+          source: { type: "base64", media_type: "application/pdf", data: lp.data }
+        });
+      }
+    }
+    isiPesan.push({ type: "text", text: materi });
+
     var badan = {
       model: MODEL,
       max_tokens: 16000,
@@ -254,7 +316,7 @@ module.exports = async function handler(req, res) {
         effort: EFFORT,
         format: { type: "json_schema", schema: t.skema }
       },
-      messages: [{ role: "user", content: materi }]
+      messages: [{ role: "user", content: isiPesan }]
     };
 
     var r = await fetch("https://api.anthropic.com/v1/messages", {

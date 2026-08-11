@@ -154,6 +154,7 @@ async function bacaArsip() {
     staseUbah: await ambil("arsip:staseUbah", []),
     staseGambar: await ambil("arsip:staseGambar", {}),
     teks: await ambil("arsip:teks", {}),
+    agenda: await ambil("arsip:agenda", []),
     ikon: await ambil("arsip:ikon", ""),
     tema: await ambil("arsip:tema", null),
     versi: await ambil("arsip:versi", 0)
@@ -372,6 +373,9 @@ module.exports = async function handler(req, res) {
       if (b.staseUbah) await simpan("arsip:staseUbah", b.staseUbah);
       if (b.staseGambar) await simpan("arsip:staseGambar", b.staseGambar);
       if (typeof b.ikon === "string") await simpan("arsip:ikon", b.ikon);
+      // Agenda bersama diumumkan pemilik dan terlihat semua peran, jadi
+      // ikut arsip, bukan ember pribadi tiap akun.
+      if (Array.isArray(b.agenda)) await simpan("arsip:agenda", b.agenda.slice(0, 500));
       return res.status(200).json({ status: "tersimpan", arsip: saringUntuk(await bacaArsip(), akun) });
     }
 

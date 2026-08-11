@@ -940,6 +940,51 @@ body.berlatar .butir{opacity:.25}
 .nk-ragu{background:var(--tunggu);border-color:var(--tunggu);border-radius:100px}
 .skala-awas{margin:10px 0 0;padding:9px 12px;border-radius:11px;font-size:13px;font-weight:600;
   background:var(--tunggu-latar);color:var(--tunggu);border:1px solid var(--tunggu)}
+.lampiran-daftar{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+.lampiran-daftar:empty{display:none}
+.lampiran-cip{display:inline-flex;align-items:center;gap:7px;padding:5px 6px 5px 11px;
+  border-radius:100px;background:var(--a2);color:var(--atas-aksen);
+  font-size:12.5px;font-weight:700;max-width:100%}
+.lampiran-cip button{width:19px;height:19px;flex:none;border:0;border-radius:100px;cursor:pointer;
+  background:rgba(255,255,255,.28);color:inherit;font:800 13px/1 var(--f-teks);
+  display:grid;place-items:center}
+.lampiran-cip button:hover{background:rgba(255,255,255,.5)}
+input[type=file]{width:100%;padding:10px;border-radius:11px;border:1px dashed var(--garis);
+  background:rgba(var(--kaca),.45);font:600 13.5px/1.4 var(--f-teks);color:var(--tinta);cursor:pointer}
+.dialog-borang{display:flex;flex-direction:column;gap:4px;margin-top:4px}
+.dialog-borang .dl{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--redup);margin-top:10px}
+.dialog-borang input,.dialog-borang select{width:100%;padding:9px 11px;border-radius:10px;
+  border:1px solid var(--garis);background:rgba(var(--kaca),.65);color:var(--tinta);
+  font:600 14.5px/1.4 var(--f-teks)}
+.dialog-borang input:focus,.dialog-borang select:focus{outline:2px solid var(--a2);outline-offset:1px}
+.ag-baris2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ag-umum{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:14px;font-weight:700;cursor:pointer}
+.ag-umum input{width:auto;flex:none}
+.dialog-galat{margin:10px 0 0;font-size:13px;font-weight:700;color:var(--buruk)}
+.dialog-galat:empty{display:none}
+.ag-jml{display:inline-grid;place-items:center;min-width:24px;height:24px;padding:0 7px;margin-left:6px;
+  border-radius:100px;background:var(--garis);font-size:12.5px;font-weight:800;vertical-align:middle}
+.ag-daftar{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column;gap:9px}
+.ag-item{display:flex;align-items:flex-start;gap:12px;padding:13px 14px;border-radius:14px;
+  border:1px solid var(--garis);background:rgba(var(--kaca),.5);
+  border-left:4px solid var(--jw,var(--a2))}
+.ag-usai{opacity:.55}
+.ag-usai .ag-judul{text-decoration:line-through}
+.ag-centang{flex:none;width:24px;height:24px;margin-top:1px;border-radius:8px;cursor:pointer;
+  border:2px solid var(--garis);background:rgba(var(--kaca),.7);color:var(--baik);
+  font:900 14px/1 var(--f-teks);display:grid;place-items:center}
+.ag-centang[aria-checked="true"]{border-color:var(--baik);background:var(--baik-latar)}
+.ag-isi{flex:1;min-width:0}
+.ag-judul{font-weight:800;font-size:15.5px;letter-spacing:-.011em;line-height:1.35}
+.ag-meta{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-top:5px;
+  font-size:12.5px;font-weight:600;color:var(--redup)}
+.ag-tag{padding:2px 8px;border-radius:100px;background:var(--garis);font-weight:800;
+  font-size:11px;letter-spacing:.03em;text-transform:uppercase;color:var(--tinta)}
+.ag-bersama{background:var(--a2);color:var(--atas-aksen)}
+.ag-catatan{margin-top:6px;font-size:13.5px;color:var(--redup);line-height:1.5}
+.ag-aksi{flex:none;display:flex;gap:6px}
+@media (max-width:560px){.ag-item{flex-wrap:wrap}.ag-aksi{width:100%;padding-left:36px}}
 .kuis-kemudi{display:flex;flex-wrap:wrap;gap:9px;margin-top:18px}
 .kuis-kemudi .t{flex:1 1 auto}
 .ragu-nyala{background:var(--tunggu-latar);border-color:var(--tunggu);color:var(--tunggu)}
@@ -1665,6 +1710,7 @@ function dbKosong(){
     stase:[],
     staseUbah:[],
     entri:[],
+    agenda:[],
     seedTerlihat:[],
     skor:{},
     klarifikasi:[],
@@ -1696,6 +1742,7 @@ function muat(){
         d.stase = Array.isArray(p.stase) ? p.stase : [];
         d.staseUbah = Array.isArray(p.staseUbah) ? p.staseUbah : [];
         d.entri = Array.isArray(p.entri) ? p.entri : [];
+        d.agenda = Array.isArray(p.agenda) ? p.agenda : [];
         d.seedTerlihat = Array.isArray(p.seedTerlihat) ? p.seedTerlihat : [];
         d.skor = p.skor && typeof p.skor === "object" ? p.skor : {};
         d.klarifikasi = Array.isArray(p.klarifikasi) ? p.klarifikasi : [];
@@ -1825,10 +1872,14 @@ function jebakTab(ev, wadah){
 function dialog(o){
   o = o || {};
   return new Promise(function(selesai){
-    if(dialogAktif){ selesai(o.jenis === "teks" ? null : false); return; }
+    var kosongan = o.jenis === "teks" || o.jenis === "borang" ? null : false;
+    if(dialogAktif){ selesai(kosongan); return; }
 
     var teks = o.jenis === "teks";
     var info = o.jenis === "info";
+    // "borang" menampung beberapa isian sekaligus; pemanggil menyusun HTML-nya
+    // sendiri lalu memanennya lewat o.ambil() saat dikirim.
+    var borang = o.jenis === "borang";
     var g = document.createElement("div");
     g.className = "gerbang";
     g.setAttribute("role", "dialog");
@@ -1845,6 +1896,7 @@ function dialog(o){
           '" value="' + esc(o.nilai || "") + '" placeholder="' + esc(o.placeholder || "") + '" autocomplete="off">';
       h += "</div>";
     }
+    if(borang) h += '<div class="dialog-borang">' + (o.isi || "") + '<p class="dialog-galat" id="dgalat" role="alert"></p></div>';
     h += '<div class="kotak-aksi"><button class="t ' + (o.bahaya ? "bahaya-utama" : "utama") + '" type="submit">' +
          esc(o.ok || (info ? "Mengerti" : "Lanjut")) + "</button>";
     if(!info) h += '<button class="t sunyi" type="button" id="dbatal">' + esc(o.batal || "Batal") + "</button>";
@@ -1856,7 +1908,8 @@ function dialog(o){
 
     var fokusLama = document.activeElement;
     var inp = g.querySelector("#dnilai");
-    var awal = inp || g.querySelector('button[type="submit"]');
+    var awal = inp || g.querySelector(".dialog-borang input, .dialog-borang select, .dialog-borang textarea") ||
+               g.querySelector('button[type="submit"]');
     if(awal) awal.focus();
     if(inp && inp.select) inp.select();
 
@@ -1867,7 +1920,7 @@ function dialog(o){
       if(fokusLama && fokusLama.focus){ try{ fokusLama.focus(); }catch(e){} }
       selesai(hasil);
     }
-    function batal(){ tutup(teks ? null : false); }
+    function batal(){ tutup(kosongan); }
 
     function padaTombol(ev){
       if(ev.key === "Escape" && !info){ ev.preventDefault(); batal(); }
@@ -1877,6 +1930,16 @@ function dialog(o){
 
     g.querySelector("#dform").addEventListener("submit", function(ev){
       ev.preventDefault();
+      if(borang){
+        var panen = o.ambil ? o.ambil() : {nilai:{}};
+        if(panen && panen.galat){
+          var eg = g.querySelector("#dgalat");
+          if(eg) eg.textContent = panen.galat;
+          return;
+        }
+        tutup(panen ? panen.nilai : null);
+        return;
+      }
       tutup(teks ? (inp ? inp.value : "") : true);
     });
     var tb = g.querySelector("#dbatal");
@@ -1970,6 +2033,7 @@ var IKON = {
   keluar:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg>',
   balik:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
   main:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l13 8-13 8z"/></svg>',
+  jadwal:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
   ipk:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
   tampilan:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="m3 14 4.5-4.5 3.5 3 3.5-3.5L21 14"/><circle cx="8.5" cy="8.5" r="1.2"/></svg>'
 };
@@ -2274,7 +2338,8 @@ var pribadi = null;
 function kunciPribadi(){ return KUNCI + "/pribadi/" + (penggunaAkun() || "tamu"); }
 
 function pribadiKosong(){
-  return {latar:null, latarBuram:0, latarGelap:45, tema:null, ipk:null, skor:{}, klarifikasi:[]};
+  return {latar:null, latarBuram:0, latarGelap:45, tema:null, ipk:null, skor:{}, klarifikasi:[],
+          agenda:[], agendaSelesai:{}};
 }
 
 function muatPribadi(){
@@ -2299,6 +2364,14 @@ function muatPribadi(){
 function skorSaya(){
   if(!pribadi.skor || typeof pribadi.skor !== "object") pribadi.skor = {};
   return pribadi.skor;
+}
+function agendaSaya(){
+  if(!Array.isArray(pribadi.agenda)) pribadi.agenda = [];
+  return pribadi.agenda;
+}
+function agendaSelesai(){
+  if(!pribadi.agendaSelesai || typeof pribadi.agendaSelesai !== "object") pribadi.agendaSelesai = {};
+  return pribadi.agendaSelesai;
 }
 function klarifikasiSaya(){
   if(!Array.isArray(pribadi.klarifikasi)) pribadi.klarifikasi = [];
@@ -2391,6 +2464,9 @@ var bawah = document.getElementById("bawah");
 
 function navItem(){
   var n = [{v:"arsip", ik:"arsip", nm:"Arsip"}];
+  // Jadwal terbuka untuk semua peran: tiap orang punya pengingat sendiri,
+  // dan pemilik bisa mengumumkan agenda bersama.
+  n.push({v:"jadwal", ik:"jadwal", nm:"Jadwal", lencana:jadwalMendesak()});
   n.push({v:"ipk", ik:"ipk", nm:"IPK"});
   if(bisaTulis()) n.push({v:"editor", ik:"tambah", nm:"Tambah", sorot:true});
   if(pemilik()) n.push({v:"tinjauan", ik:"tinjau", nm:"Tinjauan", lencana:antrian().length});
@@ -2540,6 +2616,7 @@ function render(){
   else if(ui.view === "kuis") viewKuis();
   else if(ui.view === "editor") viewEditor();
   else if(ui.view === "tinjauan") viewTinjauan();
+  else if(ui.view === "jadwal") viewJadwal();
   else if(ui.view === "ipk") viewIpk();
   else if(ui.view === "tampilan") viewTampilan();
   else if(ui.view === "alat") viewAlat();
@@ -3098,6 +3175,18 @@ function viewEditor(){
   h += '<textarea id="fIsi" placeholder="Tulis pakai markdown ringkas">' + esc(e.isi) + "</textarea>";
   h += '<span class="bantu">Didukung: <code>##</code> judul, daftar, <code>**tebal**</code>, <code>*miring*</code>, <code>`kode`</code>, kutipan <code>&gt;</code>, dan tabel pipa.</span></div>';
 
+  // Impor berkas di editor sengaja tidak memanggil Claude: penguraiannya
+  // seluruhnya di browser, jadi kontributor pun bisa memakainya tanpa
+  // menagih kunci API pemilik.
+  h += '<div class="b"><label for="fBerkas">Ambil isi dari berkas</label>';
+  h += '<input type="file" id="fBerkas" multiple accept=".pptx,.docx,.txt,.md">';
+  h += '<span class="bantu">PowerPoint (.pptx), Word (.docx), dan teks biasa diubah jadi tulisan lalu ditambahkan ke kotak Isi di atas. Semuanya diproses di browser ini, berkasnya tidak diunggah ke mana pun. ' +
+       (pemilik()
+         ? "Untuk PDF, foto slide, dan perapian oleh Claude, pakai menu Alat."
+         : "PDF dan gambar belum bisa diurai di sini \u2014 salin teksnya manual.") +
+       '</span>';
+  h += '<span id="fBerkasKabar" class="bantu" style="font-weight:700"></span></div>';
+
   h += '<div class="b" id="kotakSoal"' + (e.tipe === "kuis" ? "" : ' style="display:none"') + '>';
   h += '<label for="fSoal">Soal</label>';
   h += '<textarea id="fSoal" class="mono" placeholder="1. Pertanyaan\u2026&#10;A. opsi&#10;B. opsi&#10;Jawaban: B&#10;Pembahasan: \u2026">' + esc(soalKeTeks(e.soal)) + "</textarea>";
@@ -3128,6 +3217,34 @@ function viewEditor(){
 
   fTipe.addEventListener("change", function(){
     kotakSoal.style.display = fTipe.value === "kuis" ? "" : "none";
+  });
+
+  var inpBerkasE = document.getElementById("fBerkas");
+  if(inpBerkasE) inpBerkasE.addEventListener("change", async function(){
+    var kabar = document.getElementById("fBerkasKabar");
+    var daftar = Array.prototype.slice.call(inpBerkasE.files || []);
+    inpBerkasE.value = "";
+    for(var bi = 0; bi < daftar.length; bi++){
+      kabar.textContent = "Membaca " + daftar[bi].name + "\u2026";
+      kabar.style.color = "var(--redup)";
+      try{
+        var hasilB = await bacaBerkasMateri(daftar[bi]);
+        if(!hasilB.teks){
+          throw new Error(hasilB.jenis + " tidak bisa diurai di sini. " +
+            (pemilik() ? "Pakai menu Alat supaya Claude yang membacanya."
+                       : "Salin teksnya manual, atau minta pemilik memprosesnya."));
+        }
+        var ta = document.getElementById("fIsi");
+        ta.value += (ta.value.trim() ? "\n\n" : "") + "## " + hasilB.nama + "\n\n" + hasilB.teks;
+        var judulE = document.getElementById("fJudul");
+        if(judulE && !judulE.value.trim()) judulE.value = hasilB.nama.replace(/\.[^.]+$/, "");
+        kabar.textContent = hasilB.nama + " masuk ke kotak Isi (" + hasilB.jenis + ").";
+        kabar.style.color = "var(--baik)";
+      }catch(err){
+        kabar.textContent = err.message;
+        kabar.style.color = "var(--buruk)";
+      }
+    }
   });
 
   document.getElementById("batal").addEventListener("click", keluarEditor);
@@ -3358,6 +3475,10 @@ function viewAlat(){
     h += '<div class="b"><label for="bahanClaude">Materi atau latihan soal</label>';
     h += '<textarea id="bahanClaude" placeholder="Tempel catatan kuliah, ringkasan buku, atau latihan soal apa adanya di sini."></textarea>';
     h += '<span class="bantu">Batas sekali kirim sekitar 60 ribu karakter. Kalau materinya lebih panjang, potong jadi beberapa bagian.</span></div>';
+    h += '<div class="b"><label for="berkasClaude">Atau ambil dari berkas</label>';
+    h += '<input type="file" id="berkasClaude" multiple accept=".pptx,.docx,.pdf,.txt,.md,image/*">';
+    h += '<span class="bantu">PowerPoint dan Word dibaca jadi teks langsung di browser ini. PDF dan foto slide dikirim ke Claude untuk dibaca sendiri. Video belum bisa diproses \u2014 unggah slidenya, atau tempel tautannya di kolom Sumber entri.</span>';
+    h += '<div id="berkasDaftar" class="lampiran-daftar"></div></div>';
     h += '<div class="b"><label for="staseClaude">Masuk ke stase</label><select id="staseClaude">';
     semuaStase().forEach(function(x){
       h += '<option value="' + esc(x.id) + '"' + (x.id === (ui.stase !== "semua" ? ui.stase : "ipd") ? " selected" : "") + ">" + esc(x.kode) + " \u2014 " + esc(x.nama) + "</option>";
@@ -3369,7 +3490,7 @@ function viewAlat(){
     h += "</section>";
   }
 
-  if(bisaTulis()){
+  if(pemilik()){
   h += '<section class="kotak kaca"><h2>Cara manual: salin pemicu</h2>';
   h += "<p>Untuk dipakai di percakapan Claude biasa. Salin pemicu, tempel ke Claude bersama materimu, lalu tempel JSON balasannya di kotak berikutnya.</p>";
   h += '<div class="kotak-aksi"><button class="t utama" id="cpOutline" type="button">Salin pemicu outline</button>';
@@ -3441,10 +3562,58 @@ function viewAlat(){
     });
   }
 
+  var lampiranClaude = [];
+
+  function gambarLampiran(){
+    var kotak = document.getElementById("berkasDaftar");
+    if(!kotak) return;
+    if(!lampiranClaude.length){ kotak.innerHTML = ""; return; }
+    kotak.innerHTML = lampiranClaude.map(function(l, i){
+      return '<span class="lampiran-cip">' + esc(l.jenis) + ": " + esc(l.nama) +
+             '<button type="button" data-buang-lampiran="' + i + '" aria-label="Buang ' + esc(l.nama) + '">\u00D7</button></span>';
+    }).join("");
+    Array.prototype.forEach.call(kotak.querySelectorAll("[data-buang-lampiran]"), function(b){
+      b.addEventListener("click", function(){
+        lampiranClaude.splice(Number(b.dataset.buangLampiran), 1);
+        gambarLampiran();
+      });
+    });
+  }
+
+  var inpBerkas = document.getElementById("berkasClaude");
+  if(inpBerkas) inpBerkas.addEventListener("change", async function(){
+    var kabar = document.getElementById("claudeKabar");
+    var daftar = Array.prototype.slice.call(inpBerkas.files || []);
+    inpBerkas.value = "";
+    for(var i = 0; i < daftar.length; i++){
+      kabar.textContent = "Membaca " + daftar[i].name + "\u2026";
+      kabar.style.color = "var(--redup)";
+      try{
+        var hasil = await bacaBerkasMateri(daftar[i]);
+        if(hasil.teks){
+          // Teks yang bisa diurai di browser langsung masuk kotak materi,
+          // supaya bisa diperiksa dan disunting sebelum dikirim.
+          var ta = document.getElementById("bahanClaude");
+          ta.value += (ta.value.trim() ? "\n\n" : "") + "# " + hasil.nama + "\n\n" + hasil.teks;
+        } else {
+          lampiranClaude.push({nama:hasil.nama, jenis:hasil.jenis,
+                               jenisKirim:hasil.lampiran.jenis,
+                               mime:hasil.lampiran.mime, data:hasil.lampiran.data});
+        }
+        kabar.textContent = hasil.nama + " terbaca (" + hasil.jenis + ").";
+        kabar.style.color = "var(--baik)";
+      }catch(err){
+        kabar.textContent = err.message;
+        kabar.style.color = "var(--buruk)";
+      }
+    }
+    gambarLampiran();
+  });
+
   function jalankanClaude(tugas, tombol){
     var bahan = document.getElementById("bahanClaude").value;
     var kabar = document.getElementById("claudeKabar");
-    if(!bahan.trim()){ toast("Tempel dulu materinya."); return; }
+    if(!bahan.trim() && !lampiranClaude.length){ toast("Tempel materinya dulu, atau unggah berkas."); return; }
 
     var semua = ["susunOutline","susunKuis"].map(function(id){ return document.getElementById(id); });
     semua.forEach(function(b){ if(b) b.disabled = true; });
@@ -3453,7 +3622,7 @@ function viewAlat(){
     kabar.textContent = "Ini bisa sampai satu menit.";
     kabar.style.color = "var(--redup)";
 
-    mintaClaude(tugas, bahan).then(function(r){
+    mintaClaude(tugas, bahan, lampiranClaude).then(async function(r){
       semua.forEach(function(b){ if(b) b.disabled = false; });
       tombol.textContent = labelAsli;
 
@@ -3480,8 +3649,15 @@ function viewAlat(){
         kabar.style.color = "var(--buruk)";
         return;
       }
-      simpan();
+      var tulis = await simpanImpor(hasil);
+      if(!tulis.ok){
+        kabar.textContent = tulis.pesan;
+        kabar.style.color = "var(--buruk)";
+        return;
+      }
       document.getElementById("bahanClaude").value = "";
+      lampiranClaude = [];
+      gambarLampiran();
       toast(hasil.pesan + " Periksa dulu sebelum dipakai.");
       setTimeout(function(){ ui.view = "arsip"; render(); }, 800);
     });
@@ -3498,16 +3674,19 @@ function viewAlat(){
   if(cpK) cpK.addEventListener("click", function(){ salin(promptKuis(), "Pemicu kuis disalin."); });
 
   var imp = document.getElementById("impor");
-  if(imp) imp.addEventListener("click", function(){
+  if(imp) imp.addEventListener("click", async function(){
     var st = document.getElementById("statusImpor");
     var r = imporJson(document.getElementById("tempel").value);
-    st.textContent = r.pesan;
-    st.style.color = r.ok ? "var(--baik)" : "var(--buruk)";
-    if(r.ok){
-      document.getElementById("tempel").value = "";
-      simpan();
-      setTimeout(function(){ ui.view = "arsip"; render(); }, 750);
+    if(!r.ok){
+      st.textContent = r.pesan; st.style.color = "var(--buruk)"; return;
     }
+    st.textContent = "Menyimpan\u2026"; st.style.color = "var(--redup)";
+    var tulis = await simpanImpor(r);
+    if(!tulis.ok){ st.textContent = tulis.pesan; st.style.color = "var(--buruk)"; return; }
+    st.textContent = r.pesan + (SERVER.ada ? " Tersimpan di server." : "");
+    st.style.color = "var(--baik)";
+    document.getElementById("tempel").value = "";
+    setTimeout(function(){ ui.view = "arsip"; render(); }, 750);
   });
 
   var sk = document.getElementById("salinKiriman");
@@ -3557,6 +3736,185 @@ function viewAlat(){
   });
 }
 
+/* =====================================================================
+   11c. Membaca berkas materi (PPT, Word, PDF, gambar)
+   ===================================================================== */
+
+/* PPTX dan DOCX sebenarnya arsip ZIP berisi XML. DecompressionStream sudah
+   ada di semua browser modern, jadi teksnya bisa dikeluarkan tanpa pustaka
+   luar sama sekali \u2014 dan tanpa mengirim berkasnya ke mana pun. */
+async function bukaZip(buf){
+  var dv = new DataView(buf);
+  var n = buf.byteLength;
+  // Cari End Of Central Directory dari belakang.
+  var eocd = -1;
+  for(var i = n - 22; i >= 0 && i >= n - 66000; i--){
+    if(dv.getUint32(i, true) === 0x06054b50){ eocd = i; break; }
+  }
+  if(eocd < 0) throw new Error("Berkasnya bukan arsip ZIP yang sah.");
+
+  var jml = dv.getUint16(eocd + 10, true);
+  var mulai = dv.getUint32(eocd + 16, true);
+  var isi = {};
+  var p = mulai;
+
+  for(var k = 0; k < jml; k++){
+    if(dv.getUint32(p, true) !== 0x02014b50) break;
+    var metode = dv.getUint16(p + 10, true);
+    var ukurTerkompres = dv.getUint32(p + 20, true);
+    var panjangNama = dv.getUint16(p + 28, true);
+    var panjangEkstra = dv.getUint16(p + 30, true);
+    var panjangKomentar = dv.getUint16(p + 32, true);
+    var offsetLokal = dv.getUint32(p + 42, true);
+    var nama = new TextDecoder().decode(new Uint8Array(buf, p + 46, panjangNama));
+    p += 46 + panjangNama + panjangEkstra + panjangKomentar;
+
+    if(!/\.xml$/i.test(nama)) continue;
+
+    // Header lokal punya panjang nama/ekstra sendiri, wajib dibaca ulang.
+    var nl = dv.getUint16(offsetLokal + 26, true);
+    var el = dv.getUint16(offsetLokal + 28, true);
+    var awalData = offsetLokal + 30 + nl + el;
+    var mentah = new Uint8Array(buf, awalData, ukurTerkompres);
+
+    var keluar;
+    if(metode === 0){
+      keluar = mentah;
+    } else if(metode === 8 && typeof DecompressionStream === "function"){
+      var aliran = new Blob([mentah]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+      keluar = new Uint8Array(await new Response(aliran).arrayBuffer());
+    } else {
+      continue;
+    }
+    isi[nama] = new TextDecoder().decode(keluar);
+  }
+  return isi;
+}
+
+function teksDariXml(xml, tag){
+  var keluar = [];
+  var re = new RegExp("<" + tag + "[^>]*>([\\s\\S]*?)</" + tag + ">", "g");
+  var m;
+  while((m = re.exec(xml))){
+    var t = m[1].replace(/<[^>]+>/g, "");
+    t = t.replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+         .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+    if(t.trim()) keluar.push(t);
+  }
+  return keluar;
+}
+
+async function teksDariPptx(buf){
+  var isi = await bukaZip(buf);
+  var slide = Object.keys(isi)
+    .filter(function(n){ return /^ppt\/slides\/slide\d+\.xml$/.test(n); })
+    .sort(function(a, b){
+      return Number(a.replace(/\D+/g, "")) - Number(b.replace(/\D+/g, ""));
+    });
+  if(!slide.length) throw new Error("Tidak ada slide yang terbaca di berkas ini.");
+
+  var bagian = [];
+  slide.forEach(function(nama, i){
+    var baris = teksDariXml(isi[nama], "a:t");
+    if(!baris.length) return;
+    // Baris pertama slide hampir selalu judulnya.
+    bagian.push("## Slide " + (i + 1) + ": " + baris[0]);
+    if(baris.length > 1){
+      bagian.push(baris.slice(1).map(function(b){ return "- " + b; }).join("\n"));
+    }
+  });
+  if(!bagian.length) throw new Error("Slidenya terbaca tapi tidak ada teks di dalamnya.");
+  return bagian.join("\n\n");
+}
+
+async function teksDariDocx(buf){
+  var isi = await bukaZip(buf);
+  var xml = isi["word/document.xml"];
+  if(!xml) throw new Error("Ini bukan berkas Word yang bisa dibaca.");
+  var paragraf = xml.split(/<w:p[ >]/).map(function(blok){
+    return teksDariXml(blok, "w:t").join("");
+  }).filter(function(t){ return t.trim(); });
+  if(!paragraf.length) throw new Error("Dokumennya tidak berisi teks.");
+  return paragraf.join("\n\n");
+}
+
+/* Gambar dikecilkan dulu. Foto ponsel 12 MP jadi beberapa ratus KB tanpa
+   kehilangan keterbacaan tulisan, dan itu bedanya antara muat dikirim atau
+   ditolak karena badan permintaan kegedean. */
+function kecilkanGambar(berkas, sisiMaks){
+  return new Promise(function(selesai, gagal){
+    var url = URL.createObjectURL(berkas);
+    var img = new Image();
+    img.onload = function(){
+      URL.revokeObjectURL(url);
+      var w = img.naturalWidth, t = img.naturalHeight;
+      var skala = Math.min(1, sisiMaks / Math.max(w, t));
+      var kanvas = document.createElement("canvas");
+      kanvas.width = Math.round(w * skala);
+      kanvas.height = Math.round(t * skala);
+      kanvas.getContext("2d").drawImage(img, 0, 0, kanvas.width, kanvas.height);
+      var durl = kanvas.toDataURL("image/jpeg", 0.75);
+      selesai({mime:"image/jpeg", data:durl.slice(durl.indexOf(",") + 1),
+               lebar:kanvas.width, tinggi:kanvas.height});
+    };
+    img.onerror = function(){ URL.revokeObjectURL(url); gagal(new Error("Gambarnya tidak bisa dibuka.")); };
+    img.src = url;
+  });
+}
+
+function base64Berkas(berkas){
+  return new Promise(function(selesai, gagal){
+    var fr = new FileReader();
+    fr.onload = function(){
+      var d = String(fr.result);
+      selesai(d.slice(d.indexOf(",") + 1));
+    };
+    fr.onerror = function(){ gagal(new Error("Berkasnya gagal dibaca.")); };
+    fr.readAsDataURL(berkas);
+  });
+}
+
+/* Satu pintu untuk semua berkas. Mengembalikan {teks} kalau isinya bisa
+   dijadikan tulisan di browser, atau {lampiran} kalau berkasnya harus
+   dibaca Claude sendiri. */
+async function bacaBerkasMateri(berkas){
+  var nama = berkas.name || "berkas";
+  var akhiran = (nama.split(".").pop() || "").toLowerCase();
+
+  if(/^video\//.test(berkas.type) || ["mp4","mov","avi","mkv","webm"].indexOf(akhiran) !== -1){
+    throw new Error("Video belum bisa diproses \u2014 Claude tidak bisa menontonnya. " +
+      "Kalau ada slide atau catatannya, unggah itu; atau tempel tautan videonya di kolom Sumber.");
+  }
+  if(akhiran === "ppt" || akhiran === "doc"){
+    throw new Error("Format lama (." + akhiran + ") tidak terbaca. Simpan ulang sebagai ." +
+      akhiran + "x atau PDF, lalu unggah lagi.");
+  }
+
+  if(akhiran === "pptx"){
+    return {nama:nama, teks: await teksDariPptx(await berkas.arrayBuffer()), jenis:"PowerPoint"};
+  }
+  if(akhiran === "docx"){
+    return {nama:nama, teks: await teksDariDocx(await berkas.arrayBuffer()), jenis:"Word"};
+  }
+  if(berkas.type === "application/pdf" || akhiran === "pdf"){
+    if(berkas.size > 3000000){
+      throw new Error("PDF-nya lebih dari 3 MB. Kirim per bab supaya muat.");
+    }
+    return {nama:nama, jenis:"PDF",
+            lampiran:{jenis:"pdf", mime:"application/pdf", data: await base64Berkas(berkas)}};
+  }
+  if(/^image\//.test(berkas.type)){
+    var g = await kecilkanGambar(berkas, 1500);
+    return {nama:nama, jenis:"Gambar",
+            lampiran:{jenis:"gambar", mime:g.mime, data:g.data}};
+  }
+  if(akhiran === "txt" || akhiran === "md" || /^text\//.test(berkas.type)){
+    return {nama:nama, jenis:"Teks", teks: await berkas.text()};
+  }
+  throw new Error("Jenis berkas ." + akhiran + " belum didukung. " +
+    "Yang bisa: PPTX, DOCX, PDF, gambar, dan teks biasa.");
+}
+
 function imporJson(teks){
   var s = String(teks || "").trim();
   if(!s) return {ok:false, pesan:"Kotaknya masih kosong."};
@@ -3573,6 +3931,7 @@ function imporJson(teks){
   semuaStase().forEach(function(x){ sah[x.id] = true; });
 
   var tambah = 0, perbarui = 0, lewat = 0;
+  var dibuat = [];
   arr.forEach(function(o){
     if(!o || typeof o !== "object" || !o.judul){ lewat++; return; }
     var soal = Array.isArray(o.soal) ? o.soal.map(normalSoal).filter(Boolean) : [];
@@ -3598,6 +3957,7 @@ function imporJson(teks){
     }
     if(idx >= 0){ obj.id = db.entri[idx].id; db.entri[idx] = obj; perbarui++; }
     else { db.entri.push(obj); tambah++; }
+    dibuat.push(obj);
   });
 
   if(!tambah && !perbarui) return {ok:false, pesan:"Tidak ada entri sah \u2014 setiap entri butuh \u201Cjudul\u201D."};
@@ -3605,7 +3965,19 @@ function imporJson(teks){
   if(tambah) p.push(tambah + " ditambahkan");
   if(perbarui) p.push(perbarui + " diperbarui");
   if(lewat) p.push(lewat + " dilewati");
-  return {ok:true, pesan:p.join(", ") + "."};
+  return {ok:true, pesan:p.join(", ") + ".", entri:dibuat};
+}
+
+/* Menulis hasil impor ke tempat yang benar. Tanpa ini, di mode server entri
+   hasil tempel-JSON cuma hidup di localStorage lalu tertimpa arsip server
+   begitu halaman dimuat ulang \u2014 persis gejala "habis bikin kuis, direfresh
+   hilang". */
+async function simpanImpor(hasil){
+  if(!SERVER.ada){ simpan(); return {ok:true}; }
+  var js = await srv("entriSimpan", {entri:hasil.entri});
+  if(js.galat) return {ok:false, pesan:js.galat};
+  if(js.arsip) pasangArsipServer(js.arsip);
+  return {ok:true};
 }
 
 /* =====================================================================
@@ -3918,6 +4290,270 @@ function opsiHuruf(terpilih, kosong){
          esc(s.huruf) + " (" + angka(s.poin) + ")</option>";
   });
   return h;
+}
+
+/* =====================================================================
+   11b. Jadwal & pengingat kegiatan koas
+   ===================================================================== */
+
+var JENIS_AGENDA = [
+  {id:"jaga",  nm:"Jaga",   w:"var(--a2)"},
+  {id:"ujian", nm:"Ujian",  w:"var(--buruk)"},
+  {id:"tugas", nm:"Tugas",  w:"var(--tunggu)"},
+  {id:"acara", nm:"Acara",  w:"var(--baik)"}
+];
+function jenisAgenda(id){
+  for(var i=0;i<JENIS_AGENDA.length;i++){ if(JENIS_AGENDA[i].id === id) return JENIS_AGENDA[i]; }
+  return JENIS_AGENDA[3];
+}
+
+/* Agenda bersama (diumumkan pemilik) dan agenda pribadi ditampilkan dalam
+   satu aliran, tapi disimpan terpisah: yang bersama ikut arsip di server,
+   yang pribadi ikut ember tiap akun. */
+function jadwalGabung(){
+  var keluar = [];
+  (db.agenda || []).forEach(function(a){
+    keluar.push({id:a.id, judul:a.judul, tanggal:a.tanggal, jam:a.jam || "",
+                 jenis:a.jenis, catatan:a.catatan || "", bersama:true,
+                 selesai: agendaSelesai()[a.id] === true});
+  });
+  agendaSaya().forEach(function(a){
+    keluar.push({id:a.id, judul:a.judul, tanggal:a.tanggal, jam:a.jam || "",
+                 jenis:a.jenis, catatan:a.catatan || "", bersama:false,
+                 selesai: a.selesai === true});
+  });
+  keluar.sort(function(x, y){
+    if(x.tanggal !== y.tanggal) return x.tanggal < y.tanggal ? -1 : 1;
+    return (x.jam || "99:99") < (y.jam || "99:99") ? -1 : 1;
+  });
+  return keluar;
+}
+
+function jadwalMendesak(){
+  if(!db) return 0;
+  var kini = hariIni();
+  return jadwalGabung().filter(function(a){
+    return !a.selesai && a.tanggal <= kini;
+  }).length;
+}
+
+function selisihHari(tanggal){
+  var a = new Date(hariIni() + "T00:00:00");
+  var b = new Date(tanggal + "T00:00:00");
+  return Math.round((b - a) / 86400000);
+}
+
+function labelWaktu(tanggal){
+  var d = selisihHari(tanggal);
+  if(isNaN(d)) return tanggal;
+  if(d === 0) return "Hari ini";
+  if(d === 1) return "Besok";
+  if(d === -1) return "Kemarin";
+  if(d < 0) return Math.abs(d) + " hari lalu";
+  if(d < 7) return d + " hari lagi";
+  return tanggal;
+}
+
+function kelompokJadwal(a){
+  var d = selisihHari(a.tanggal);
+  if(a.selesai) return "selesai";
+  if(isNaN(d) || d < 0) return "lewat";
+  if(d === 0) return "kini";
+  if(d <= 7) return "dekat";
+  return "nanti";
+}
+
+function viewJadwal(){
+  var h = bilahAtas();
+  var semua = jadwalGabung();
+
+  h += '<section class="lembar kaca"><h1 class="judul-besar">Jadwal koas</h1>';
+  h += '<p style="color:var(--redup);font-size:14px;margin:10px 0 0;max-width:60ch">Pengingat jaga, ujian, dan tugas. Yang kamu tambahkan di sini milik akunmu sendiri' +
+       (pemilik() ? ", dan sebagai pemilik kamu bisa mengumumkan agenda untuk semua orang." : ". Agenda bertanda \u201Cbersama\u201D diumumkan pemilik arsip.") + "</p>";
+  h += '<div class="kotak-aksi"><button class="t utama" id="agTambah" type="button">+ Pengingat</button></div>';
+  h += "</section>";
+
+  var judulKel = {lewat:"Terlewat", kini:"Hari ini", dekat:"Minggu ini", nanti:"Nanti", selesai:"Sudah selesai"};
+  var urutKel = ["lewat", "kini", "dekat", "nanti", "selesai"];
+  var ember = {};
+  urutKel.forEach(function(k){ ember[k] = []; });
+  semua.forEach(function(a){ ember[kelompokJadwal(a)].push(a); });
+
+  if(!semua.length){
+    h += '<section class="kotak kaca"><div class="sepi-kotak" style="padding:30px">' +
+         "<b>Belum ada pengingat</b><span>Tambahkan jaga malam, ujian stase, atau tenggat laporan supaya tidak kelewat.</span></div></section>";
+  }
+
+  urutKel.forEach(function(k){
+    var isi = ember[k];
+    if(!isi.length) return;
+    h += '<section class="kotak kaca"><h2>' + judulKel[k] +
+         ' <span class="ag-jml">' + isi.length + "</span></h2>";
+    h += '<ul class="ag-daftar">';
+    isi.forEach(function(a){
+      var j = jenisAgenda(a.jenis);
+      h += '<li class="ag-item' + (a.selesai ? " ag-usai" : "") + '" style="--jw:' + j.w + '">';
+      h += '<button class="ag-centang" type="button" data-ag-usai="' + esc(a.id) + '" role="checkbox" aria-checked="' +
+           (a.selesai ? "true" : "false") + '" aria-label="Tandai ' + esc(a.judul) + ' selesai">' +
+           (a.selesai ? "\u2713" : "") + "</button>";
+      h += '<div class="ag-isi">';
+      h += '<div class="ag-judul">' + esc(a.judul) + "</div>";
+      h += '<div class="ag-meta"><span class="ag-tag">' + esc(j.nm) + "</span>";
+      h += "<span>" + esc(labelWaktu(a.tanggal)) + (a.jam ? " \u00B7 " + esc(a.jam) : "") + "</span>";
+      if(a.bersama) h += '<span class="ag-tag ag-bersama">bersama</span>';
+      h += "</div>";
+      if(a.catatan) h += '<div class="ag-catatan">' + esc(a.catatan) + "</div>";
+      h += "</div>";
+      // Agenda bersama hanya boleh disunting pemilik; yang lain tetap bisa
+      // mencentangnya selesai untuk dirinya sendiri.
+      if(!a.bersama || pemilik()){
+        h += '<div class="ag-aksi">';
+        h += '<button class="t kcl" type="button" data-ag-ubah="' + esc(a.id) + '">Ubah</button>';
+        h += '<button class="t kcl" type="button" data-ag-hapus="' + esc(a.id) + '">Hapus</button>';
+        h += "</div>";
+      }
+      h += "</li>";
+    });
+    h += "</ul></section>";
+  });
+
+  panggung.innerHTML = h;
+  pasangCari();
+  pasangJadwal();
+}
+
+function cariAgenda(id){
+  var b = (db.agenda || []).filter(function(x){ return x.id === id; })[0];
+  if(b) return {a:b, bersama:true};
+  var p = agendaSaya().filter(function(x){ return x.id === id; })[0];
+  return p ? {a:p, bersama:false} : null;
+}
+
+async function formAgenda(awal){
+  var baru = !awal;
+  var a = awal || {judul:"", tanggal:hariIni(), jam:"", jenis:"jaga", catatan:"", bersama:false};
+  var isi =
+    '<label class="dl">Kegiatan</label>' +
+    '<input id="agJudul" type="text" maxlength="120" value="' + esc(a.judul) + '" placeholder="mis. Jaga malam IGD">' +
+    '<div class="ag-baris2">' +
+      '<div><label class="dl">Tanggal</label><input id="agTgl" type="date" value="' + esc(a.tanggal) + '"></div>' +
+      '<div><label class="dl">Jam (boleh kosong)</label><input id="agJam" type="time" value="' + esc(a.jam || "") + '"></div>' +
+    "</div>" +
+    '<label class="dl">Jenis</label><select id="agJenis">' +
+      JENIS_AGENDA.map(function(j){
+        return '<option value="' + j.id + '"' + (j.id === a.jenis ? " selected" : "") + ">" + esc(j.nm) + "</option>";
+      }).join("") +
+    "</select>" +
+    '<label class="dl">Catatan (boleh kosong)</label>' +
+    '<input id="agCatatan" type="text" maxlength="200" value="' + esc(a.catatan || "") + '" placeholder="mis. bawa stetoskop, lapor jam 6">' +
+    (pemilik()
+      ? '<label class="ag-umum"><input id="agBersama" type="checkbox"' + (a.bersama ? " checked" : "") +
+        "> Umumkan ke semua akun</label>"
+      : "");
+
+  var hasil = await dialog({
+    judul: baru ? "Pengingat baru" : "Ubah pengingat",
+    jenis: "borang",
+    isi: isi,
+    ok: baru ? "Tambahkan" : "Simpan",
+    ambil: function(){
+      var judul = document.getElementById("agJudul").value.trim();
+      if(!judul) return {galat:"Nama kegiatan belum diisi."};
+      var tgl = document.getElementById("agTgl").value;
+      if(!tgl) return {galat:"Tanggal belum diisi."};
+      var bs = document.getElementById("agBersama");
+      return {nilai:{
+        judul: judul,
+        tanggal: tgl,
+        jam: document.getElementById("agJam").value || "",
+        jenis: document.getElementById("agJenis").value,
+        catatan: document.getElementById("agCatatan").value.trim(),
+        bersama: !!(bs && bs.checked)
+      }};
+    }
+  });
+  return hasil;
+}
+
+function pasangJadwal(){
+  var tb = document.getElementById("agTambah");
+  if(tb) tb.addEventListener("click", async function(){
+    var n = await formAgenda(null);
+    if(!n) return;
+    await tulisAgenda(null, n);
+  });
+
+  Array.prototype.forEach.call(panggung.querySelectorAll("[data-ag-ubah]"), function(b){
+    b.addEventListener("click", async function(){
+      var f = cariAgenda(b.dataset.agUbah);
+      if(!f) return;
+      var awal = {judul:f.a.judul, tanggal:f.a.tanggal, jam:f.a.jam || "",
+                  jenis:f.a.jenis, catatan:f.a.catatan || "", bersama:f.bersama};
+      var n = await formAgenda(awal);
+      if(!n) return;
+      await tulisAgenda(b.dataset.agUbah, n);
+    });
+  });
+
+  Array.prototype.forEach.call(panggung.querySelectorAll("[data-ag-hapus]"), function(b){
+    b.addEventListener("click", async function(){
+      var f = cariAgenda(b.dataset.agHapus);
+      if(!f) return;
+      if(!await tanya("Hapus pengingat?", "\u201C" + f.a.judul + "\u201D akan dihapus.", {ok:"Hapus", bahaya:true})) return;
+      if(f.bersama){
+        db.agenda = (db.agenda || []).filter(function(x){ return x.id !== f.a.id; });
+        simpan();
+        await dorongAtur();
+      } else {
+        pribadi.agenda = agendaSaya().filter(function(x){ return x.id !== f.a.id; });
+        simpanPribadi();
+      }
+      render();
+      toast("Pengingat dihapus.");
+    });
+  });
+
+  Array.prototype.forEach.call(panggung.querySelectorAll("[data-ag-usai]"), function(b){
+    b.addEventListener("click", function(){
+      var f = cariAgenda(b.dataset.agUsai);
+      if(!f) return;
+      if(f.bersama){
+        // Agenda bersama dicentang per akun, bukan untuk semua orang.
+        var m = agendaSelesai();
+        if(m[f.a.id]) delete m[f.a.id]; else m[f.a.id] = true;
+      } else {
+        f.a.selesai = !f.a.selesai;
+      }
+      simpanPribadi();
+      render();
+    });
+  });
+}
+
+async function tulisAgenda(id, n){
+  var obj = {id: id || idBaru("ag"), judul:n.judul, tanggal:n.tanggal,
+             jam:n.jam, jenis:n.jenis, catatan:n.catatan};
+  var lama = id ? cariAgenda(id) : null;
+
+  // Pindah antara bersama dan pribadi berarti dicabut dulu dari asalnya.
+  if(lama){
+    if(lama.bersama) db.agenda = (db.agenda || []).filter(function(x){ return x.id !== id; });
+    else pribadi.agenda = agendaSaya().filter(function(x){ return x.id !== id; });
+  }
+
+  if(n.bersama && pemilik()){
+    if(!Array.isArray(db.agenda)) db.agenda = [];
+    db.agenda.push(obj);
+    simpan();
+    var ok = await dorongAtur();
+    if(!ok) return;
+  } else {
+    obj.selesai = lama && !lama.bersama ? lama.a.selesai === true : false;
+    agendaSaya().push(obj);
+    simpanPribadi();
+  }
+  render();
+  toast(id ? "Pengingat diperbarui." : "Pengingat ditambahkan.");
 }
 
 function viewIpk(){
@@ -4604,7 +5240,8 @@ async function dorongAtur(){
   if(!SERVER.ada) return true;
   var j = await srv("aturSimpan", {
     teks: db.teks, tema: db.tema, stase: db.stase,
-    staseUbah: db.staseUbah, staseGambar: db.staseGambar, ikon: db.ikon || ""
+    staseUbah: db.staseUbah, staseGambar: db.staseGambar, ikon: db.ikon || "",
+    agenda: db.agenda || []
   });
   if(j.galat){ toast(j.galat); return false; }
   if(j.arsip) pasangArsipServer(j.arsip);
@@ -5332,6 +5969,7 @@ function pasangArsipServer(arsip){
   if(arsip.teks) db.teks = arsip.teks;
   if(arsip.tema) db.tema = arsip.tema;
   if(typeof arsip.ikon === "string") db.ikon = arsip.ikon;
+  if(Array.isArray(arsip.agenda)) db.agenda = arsip.agenda;
   terapkanStaseUbah();
   terapkanIkon();
 }
@@ -5366,7 +6004,7 @@ async function bekalAkun(){
   }catch(e){ return null; }
 }
 
-async function mintaClaude(tugas, materi){
+async function mintaClaude(tugas, materi, lampiran){
   var bekal = await bekalAkun();
   if(!bekal) return {ok:false, pesan:"Perlu masuk dengan akunmu dulu."};
 
@@ -5375,7 +6013,12 @@ async function mintaClaude(tugas, materi){
     r = await fetch(API_CLAUDE, {
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({akun:bekal.akun, verifikasi:bekal.verifikasi, tugas:tugas, materi:materi})
+      body: JSON.stringify({
+        akun:bekal.akun, verifikasi:bekal.verifikasi, tugas:tugas, materi:materi,
+        lampiran: (lampiran || []).map(function(l){
+          return {jenis:l.jenisKirim, mime:l.mime, data:l.data};
+        })
+      })
     });
     if(r.status === 404) return {ok:false, mati:true};
     j = await r.json();
