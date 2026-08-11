@@ -168,7 +168,11 @@ function bolehLihat(e, akun) {
   var peran = akun ? akun.peran : "";
   var tingkat = akun ? akun.tingkat : "publik";
   if (peran === "pemilik") return true;
-  if (e.status !== "terbit" && !(peran === "kontributor" && e.penulis === akun.pengguna)) return false;
+  // Penulisnya selalu boleh melihat tulisannya sendiri, apa pun status dan
+  // tingkat aksesnya. Tanpa ini, kontributor bertingkat publik mengunggah
+  // materi lalu kirimannya hilang dari pandangannya sendiri.
+  if (peran === "kontributor" && akun && e.penulis === akun.pengguna) return true;
+  if (e.status !== "terbit") return false;
   if (tingkat !== "penuh" && e.akses !== "publik") return false;
   return true;
 }

@@ -2307,18 +2307,31 @@ function pemilik(){ return peran() === "pemilik"; }
 function kontributor(){ return peran() === "kontributor"; }
 function bisaTulis(){ return pemilik() || kontributor(); }
 
+/* Nama penulis punya dua bentuk: di mode server berisi nama pengguna
+   (dipaksa server), di mode luring berisi nama peran. Entri lama pun bisa
+   memakai bentuk yang satunya. Semua pengecekan "ini tulisanku" harus lewat
+   sini, jangan dibandingkan langsung dengan "kontributor". */
+function penulisSaya(){
+  return (SERVER.ada && penggunaAkun()) ? penggunaAkun() : (peran() || "pemilik");
+}
+function punyaku(e){
+  if(!e || !e.penulis) return false;
+  return e.penulis === penulisSaya() || e.penulis === peran();
+}
+
 function entriTampak(){
   // Pembaca hanya melihat yang terbit. Kontributor juga melihat miliknya
   // yang sedang ditinjau atau dikembalikan. Pemilik melihat semuanya.
   var l;
   if(pemilik()) l = db.entri;
   else if(kontributor()) l = db.entri.filter(function(e){
-    return e.status === "terbit" || e.penulis === "kontributor";
+    return e.status === "terbit" || punyaku(e);
   });
   else l = db.entri.filter(function(e){ return e.status === "terbit"; });
 
-  // Tingkat publik hanya kebagian entri bertanda publik.
-  if(!penuh() && !pemilik()) l = l.filter(function(e){ return e.akses === "publik"; });
+  // Tingkat publik hanya kebagian entri bertanda publik \u2014 kecuali
+  // tulisannya sendiri, yang harus selalu terlihat oleh penulisnya.
+  if(!penuh() && !pemilik()) l = l.filter(function(e){ return e.akses === "publik" || punyaku(e); });
   return l;
 }
 
@@ -2777,7 +2790,7 @@ function viewDetail(){
   if(!e){ ui.view = "arsip"; return render(); }
   var st = cariStase(e.stase);
   var sk = skorSaya()[e.id];
-  var bolehSunting = pemilik() || (kontributor() && e.penulis === "kontributor");
+  var bolehSunting = pemilik() || (kontributor() && punyaku(e));
 
   var h = bilahAtas();
   h += '<section class="lembar kaca">';
@@ -2790,7 +2803,7 @@ function viewDetail(){
   h += "</div>";
   h += '<h1 class="judul-besar">' + esc(e.judul) + "</h1>";
   h += '<p style="color:var(--redup);font-size:13.5px;margin:9px 0 0">' + esc(tgl(e.tanggal)) +
-       (e.penulis === "kontributor" ? " \u00B7 oleh kontributor" : "") + "</p>";
+       (e.penulis && e.penulis !== "pemilik" ? " \u00B7 oleh " + esc(e.penulis) : "") + "</p>";
 
   if((e.tag || []).length){
     h += '<div class="tag-baris" style="margin-top:12px">';
@@ -3392,7 +3405,7 @@ function viewEditor(){
       isi: document.getElementById("fIsi").value,
       soal: soal,
       status: pemilik() ? "terbit" : "menunggu",
-      penulis: e.penulis || peran(),
+      penulis: e.penulis || penulisSaya(),
       catatanTinjau: ""
     };
 
@@ -3642,10 +3655,13 @@ function viewAlat(){
 
   if(kontributor()){
     var kiriman = db.entri.filter(function(e){
-      return e.penulis === "kontributor" && e.status !== "terbit";
+      return punyaku(e) && e.status !== "terbit";
     });
-    h += '<section class="kotak kaca"><h2>Kirim ke pemilik</h2>';
-    h += "<p>Entri yang kamu tulis tersimpan di browser ini saja. Salin dari sini lalu kirimkan ke pemilik arsip supaya bisa ditinjau dan diterbitkan.</p>";
+    h += '<section class="kotak kaca"><h2>' +
+         (SERVER.ada ? "Menunggu ditinjau" : "Kirim ke pemilik") + "</h2>";
+    h += "<p>" + (SERVER.ada
+      ? "Kiriman ini sudah masuk ke server dan otomatis muncul di antrean tinjauan pemilik \u2014 tidak perlu dikirim manual. Kamu masih bisa menyuntingnya selama belum diterbitkan."
+      : "Entri yang kamu tulis tersimpan di browser ini saja. Salin dari sini lalu kirimkan ke pemilik arsip supaya bisa ditinjau dan diterbitkan.") + "</p>";
     if(!kiriman.length){
       h += '<div class="sepi-kotak" style="padding:22px"><b>Belum ada kiriman</b><span>Entri yang menunggu tinjauan akan muncul di sini.</span></div>';
     } else {
@@ -3654,8 +3670,12 @@ function viewAlat(){
              esc(cariStase(e.stase).kode) + " &middot; " + esc(e.status) + "</div>";
         h += '<p class="qq">' + esc(e.judul) + "</p></div>";
       });
-      h += '<div class="kotak-aksi"><button class="t utama" id="salinKiriman" type="button">Salin ' +
-           kiriman.length + " kiriman</button></div>";
+      // Di mode server tombol salin cuma membingungkan: kirimannya sudah
+      // sampai ke pemilik tanpa perlu ditempel manual.
+      if(!SERVER.ada){
+        h += '<div class="kotak-aksi"><button class="t utama" id="salinKiriman" type="button">Salin ' +
+             kiriman.length + " kiriman</button></div>";
+      }
     }
     h += "</section>";
   }
@@ -3827,7 +3847,7 @@ function viewAlat(){
   var sk = document.getElementById("salinKiriman");
   if(sk) sk.addEventListener("click", function(){
     var kiriman = db.entri.filter(function(e){
-      return e.penulis === "kontributor" && e.status !== "terbit";
+      return punyaku(e) && e.status !== "terbit";
     });
     salin(JSON.stringify(kiriman, null, 2),
       kiriman.length + " kiriman disalin. Kirimkan ke pemilik arsip.");
@@ -4196,7 +4216,7 @@ function imporJson(teks){
       isi: o.isi ? String(o.isi) : "",
       soal: soal,
       status: pemilik() ? "terbit" : "menunggu",
-      penulis: peran() || "pemilik",
+      penulis: penulisSaya(),
       catatanTinjau: ""
     };
     var idx = -1;
@@ -6091,7 +6111,7 @@ function pasangIsiBundel(hasil){
   dariBundel.forEach(function(e){ idBundel[e.id] = true; });
 
   var drafLokal = db.entri.filter(function(e){
-    return !idBundel[e.id] && e.penulis === "kontributor" && e.status !== "terbit";
+    return !idBundel[e.id] && punyaku(e) && e.status !== "terbit";
   });
 
   db.entri = dariBundel.concat(drafLokal);
