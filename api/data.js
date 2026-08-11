@@ -180,6 +180,38 @@ function saringUntuk(arsip, akun) {
   return Object.assign({}, arsip, { entri: terlihat });
 }
 
+/* Pengingat yang ditugaskan hidup di kunci sendiri, bukan di ember pribadi
+   pembuatnya, karena harus terbaca oleh beberapa akun sekaligus. Yang boleh
+   melihat cuma pembuat dan orang yang ditugaskan — bukan semua orang. */
+async function bacaTugasan() {
+  var t = await ambil("agenda:tugasan", []);
+  return Array.isArray(t) ? t : [];
+}
+
+function tugasanUntuk(semua, akun) {
+  if (!akun) return [];
+  return semua.filter(function (t) {
+    return t.pembuat === akun.pengguna ||
+      (Array.isArray(t.untuk) && t.untuk.indexOf(akun.pengguna) !== -1);
+  });
+}
+
+function bersihTugasan(t, akun, untukSah) {
+  var jenis = ["jaga", "ujian", "tugas", "acara"].indexOf(t.jenis) !== -1 ? t.jenis : "acara";
+  return {
+    id: String(t.id || ("ag-" + acakHex(8))).slice(0, 64),
+    judul: String(t.judul || "").slice(0, 200),
+    tanggal: String(t.tanggal || "").slice(0, 10),
+    jam: String(t.jam || "").slice(0, 5),
+    jenis: jenis,
+    catatan: String(t.catatan || "").slice(0, 400),
+    // Pembuat selalu ditentukan server: tanpa ini siapa pun bisa mengirim
+    // pengingat yang seolah dibuat orang lain.
+    pembuat: akun.pengguna,
+    untuk: untukSah
+  };
+}
+
 function bersihEntri(e, akun) {
   var soal = Array.isArray(e.soal) ? e.soal.filter(function (s) {
     return s && typeof s.q === "string" && Array.isArray(s.opsi) && s.opsi.length >= 2;
@@ -279,6 +311,7 @@ module.exports = async function handler(req, res) {
         akun: akun ? akunAman(akun) : null,
         arsip: saringUntuk(arsipSemua, akun),
         pribadi: akun ? await ambil("pribadi:" + akun.pengguna, null) : null,
+        tugasan: tugasanUntuk(await bacaTugasan(), akun),
         adaAkun: (await daftarPengguna()).length > 0
       });
     }
@@ -382,6 +415,73 @@ module.exports = async function handler(req, res) {
       // ikut arsip, bukan ember pribadi tiap akun.
       if (Array.isArray(b.agenda)) await simpan("arsip:agenda", b.agenda.slice(0, 500));
       return res.status(200).json({ status: "tersimpan", arsip: saringUntuk(await bacaArsip(), akun) });
+    }
+
+    /* ---- pengingat yang ditugaskan ke akun lain ----
+       Terbuka untuk semua peran: menjadwalkan jaga bersama teman bukan
+       tindakan menulis arsip, jadi pengakses pun boleh. */
+    if (aksi === "akunRingkas") {
+      var namaR = await daftarPengguna();
+      var ringkas = [];
+      for (var ri = 0; ri < namaR.length; ri++) {
+        var ar = await bacaAkun(namaR[ri]);
+        // Hanya nama panggilan dan nama pengguna. Peran, tingkat akses,
+        // dan masa berlaku bukan urusan sesama pemakai.
+        if (ar && ar.aktif !== false) ringkas.push({ pengguna: ar.pengguna, nama: ar.nama || ar.pengguna });
+      }
+      return res.status(200).json({ akun: ringkas });
+    }
+
+    if (aksi === "agendaTugas") {
+      var masukT = b.agenda || {};
+      if (!String(masukT.judul || "").trim()) {
+        return res.status(400).json({ galat: "Nama kegiatan belum diisi." });
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(masukT.tanggal || ""))) {
+        return res.status(400).json({ galat: "Tanggalnya tidak sah." });
+      }
+
+      // Hanya akun yang benar-benar ada yang boleh jadi sasaran.
+      var semuaNama = await daftarPengguna();
+      var mintaUntuk = Array.isArray(masukT.untuk) ? masukT.untuk.slice(0, 30) : [];
+      var untukSah = [];
+      mintaUntuk.forEach(function (u) {
+        var uu = String(u || "").toLowerCase();
+        if (semuaNama.indexOf(uu) !== -1 && untukSah.indexOf(uu) === -1) untukSah.push(uu);
+      });
+
+      var daftarT = await bacaTugasan();
+      var baruT = bersihTugasan(masukT, akun, untukSah);
+      var idxT = -1;
+      for (var ti = 0; ti < daftarT.length; ti++) {
+        if (daftarT[ti].id === baruT.id) { idxT = ti; break; }
+      }
+      if (idxT >= 0) {
+        if (daftarT[idxT].pembuat !== akun.pengguna) {
+          return res.status(403).json({ galat: "Cuma pembuatnya yang bisa mengubah pengingat ini." });
+        }
+        daftarT[idxT] = baruT;
+      } else {
+        if (daftarT.length >= 2000) {
+          return res.status(400).json({ galat: "Daftar pengingat bersama sudah penuh." });
+        }
+        daftarT.push(baruT);
+      }
+      await simpan("agenda:tugasan", daftarT);
+      return res.status(200).json({ status: "tersimpan", tugasan: tugasanUntuk(daftarT, akun) });
+    }
+
+    if (aksi === "agendaTugasHapus") {
+      var idH = String(b.id || "").slice(0, 64);
+      var daftarH = await bacaTugasan();
+      var sasaranH = daftarH.filter(function (x) { return x.id === idH; })[0];
+      if (!sasaranH) return res.status(404).json({ galat: "Pengingat tidak ditemukan." });
+      if (sasaranH.pembuat !== akun.pengguna && akun.peran !== "pemilik") {
+        return res.status(403).json({ galat: "Cuma pembuatnya yang bisa menghapus pengingat ini." });
+      }
+      var sisaH = daftarH.filter(function (x) { return x.id !== idH; });
+      await simpan("agenda:tugasan", sisaH);
+      return res.status(200).json({ status: "dihapus", tugasan: tugasanUntuk(sisaH, akun) });
     }
 
     /* ---- lampiran berkas ----

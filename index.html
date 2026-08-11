@@ -980,6 +980,14 @@ input[type=file]{width:100%;padding:10px;border-radius:11px;border:1px dashed va
 .ag-umum input{width:auto;flex:none}
 .dialog-galat{margin:10px 0 0;font-size:13px;font-weight:700;color:var(--buruk)}
 .dialog-galat:empty{display:none}
+.ag-teman{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px;max-height:170px;overflow:auto}
+.ag-orang{display:inline-flex;align-items:center;gap:7px;padding:7px 11px;border-radius:100px;
+  border:1px solid var(--garis);background:rgba(var(--kaca),.6);cursor:pointer;
+  font-size:13.5px;font-weight:700}
+.ag-orang input{width:auto;flex:none;margin:0}
+.ag-orang:has(input:checked){background:var(--a2);color:var(--atas-aksen);border-color:transparent}
+.ag-bantu{display:block;margin-top:8px;font-size:12.5px;font-weight:600;color:var(--redup);line-height:1.5}
+.ag-tugas{background:var(--baik-latar);color:var(--baik)}
 .ag-jml{display:inline-grid;place-items:center;min-width:24px;height:24px;padding:0 7px;margin-left:6px;
   border-radius:100px;background:var(--garis);font-size:12.5px;font-weight:800;vertical-align:middle}
 .ag-daftar{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column;gap:9px}
@@ -4550,6 +4558,24 @@ function jenisAgenda(id){
 /* Agenda bersama (diumumkan pemilik) dan agenda pribadi ditampilkan dalam
    satu aliran, tapi disimpan terpisah: yang bersama ikut arsip di server,
    yang pribadi ikut ember tiap akun. */
+/* Pengingat yang ditugaskan datang dari server; di mode luring tidak ada
+   karena tidak ada tempat bersama untuk menaruhnya. */
+var TUGASAN = [];
+var DAFTAR_AKUN = null;
+
+async function muatDaftarAkun(){
+  if(DAFTAR_AKUN) return DAFTAR_AKUN;
+  if(!SERVER.ada) return [];
+  var j = await srv("akunRingkas", {});
+  DAFTAR_AKUN = Array.isArray(j.akun) ? j.akun : [];
+  return DAFTAR_AKUN;
+}
+
+function namaAkun(pengguna){
+  var a = (DAFTAR_AKUN || []).filter(function(x){ return x.pengguna === pengguna; })[0];
+  return a ? a.nama : pengguna;
+}
+
 function jadwalGabung(){
   var keluar = [];
   (db.agenda || []).forEach(function(a){
@@ -4561,6 +4587,13 @@ function jadwalGabung(){
     keluar.push({id:a.id, judul:a.judul, tanggal:a.tanggal, jam:a.jam || "",
                  jenis:a.jenis, catatan:a.catatan || "", bersama:false,
                  selesai: a.selesai === true});
+  });
+  TUGASAN.forEach(function(t){
+    keluar.push({id:t.id, judul:t.judul, tanggal:t.tanggal, jam:t.jam || "",
+                 jenis:t.jenis, catatan:t.catatan || "", bersama:false,
+                 tugasan:true, pembuat:t.pembuat, untuk:t.untuk || [],
+                 punyaku: t.pembuat === penggunaAkun(),
+                 selesai: agendaSelesai()[t.id] === true});
   });
   keluar.sort(function(x, y){
     if(x.tanggal !== y.tanggal) return x.tanggal < y.tanggal ? -1 : 1;
@@ -4608,8 +4641,8 @@ function viewJadwal(){
   var semua = jadwalGabung();
 
   h += '<section class="lembar kaca"><h1 class="judul-besar">Jadwal koas</h1>';
-  h += '<p style="color:var(--redup);font-size:14px;margin:10px 0 0;max-width:60ch">Pengingat jaga, ujian, dan tugas. Yang kamu tambahkan di sini milik akunmu sendiri' +
-       (pemilik() ? ", dan sebagai pemilik kamu bisa mengumumkan agenda untuk semua orang." : ". Agenda bertanda \u201Cbersama\u201D diumumkan pemilik arsip.") + "</p>";
+  h += '<p style="color:var(--redup);font-size:14px;margin:10px 0 0;max-width:60ch">Pengingat jaga, ujian, dan tugas. Yang kamu tambahkan milik akunmu sendiri, tapi bisa kamu tugaskan ke teman yang punya akun di sini' +
+       (pemilik() ? ", dan sebagai pemilik kamu juga bisa mengumumkan agenda untuk semua orang." : ". Agenda bertanda \u201Cbersama\u201D diumumkan pemilik arsip.") + "</p>";
   h += '<div class="kotak-aksi"><button class="t utama" id="agTambah" type="button">+ Pengingat</button></div>';
   h += "</section>";
 
@@ -4641,12 +4674,24 @@ function viewJadwal(){
       h += '<div class="ag-meta"><span class="ag-tag">' + esc(j.nm) + "</span>";
       h += "<span>" + esc(labelWaktu(a.tanggal)) + (a.jam ? " \u00B7 " + esc(a.jam) : "") + "</span>";
       if(a.bersama) h += '<span class="ag-tag ag-bersama">bersama</span>';
+      if(a.tugasan){
+        if(a.punyaku){
+          var siapa = (a.untuk || []).map(namaAkun);
+          h += '<span class="ag-tag ag-tugas">' +
+               (siapa.length ? "untuk " + esc(siapa.join(", ")) : "belum ditugaskan") + "</span>";
+        } else {
+          h += '<span class="ag-tag ag-tugas">dari ' + esc(namaAkun(a.pembuat)) + "</span>";
+        }
+      }
       h += "</div>";
       if(a.catatan) h += '<div class="ag-catatan">' + esc(a.catatan) + "</div>";
       h += "</div>";
       // Agenda bersama hanya boleh disunting pemilik; yang lain tetap bisa
       // mencentangnya selesai untuk dirinya sendiri.
-      if(!a.bersama || pemilik()){
+      // Pengingat titipan orang lain tetap bisa dicentang selesai untuk
+      // diri sendiri, tapi tidak boleh disunting atau dihapus.
+      var bolehUbah = a.tugasan ? a.punyaku : (!a.bersama || pemilik());
+      if(bolehUbah){
         h += '<div class="ag-aksi">';
         h += '<button class="t kcl" type="button" data-ag-ubah="' + esc(a.id) + '">Ubah</button>';
         h += '<button class="t kcl" type="button" data-ag-hapus="' + esc(a.id) + '">Hapus</button>';
@@ -4665,13 +4710,17 @@ function viewJadwal(){
 function cariAgenda(id){
   var b = (db.agenda || []).filter(function(x){ return x.id === id; })[0];
   if(b) return {a:b, bersama:true};
+  var t = TUGASAN.filter(function(x){ return x.id === id; })[0];
+  if(t) return {a:t, bersama:false, tugasan:true};
   var p = agendaSaya().filter(function(x){ return x.id === id; })[0];
   return p ? {a:p, bersama:false} : null;
 }
 
 async function formAgenda(awal){
   var baru = !awal;
-  var a = awal || {judul:"", tanggal:hariIni(), jam:"", jenis:"jaga", catatan:"", bersama:false};
+  var a = awal || {judul:"", tanggal:hariIni(), jam:"", jenis:"jaga", catatan:"", bersama:false, untuk:[]};
+  var teman = (await muatDaftarAkun()).filter(function(x){ return x.pengguna !== penggunaAkun(); });
+  var dipilih = a.untuk || [];
   var isi =
     '<label class="dl">Kegiatan</label>' +
     '<input id="agJudul" type="text" maxlength="120" value="' + esc(a.judul) + '" placeholder="mis. Jaga malam IGD">' +
@@ -4686,6 +4735,14 @@ async function formAgenda(awal){
     "</select>" +
     '<label class="dl">Catatan (boleh kosong)</label>' +
     '<input id="agCatatan" type="text" maxlength="200" value="' + esc(a.catatan || "") + '" placeholder="mis. bawa stetoskop, lapor jam 6">' +
+    (teman.length
+      ? '<label class="dl">Tugaskan ke teman</label><div class="ag-teman">' +
+        teman.map(function(t){
+          return '<label class="ag-orang"><input type="checkbox" class="agUntuk" value="' + esc(t.pengguna) + '"' +
+                 (dipilih.indexOf(t.pengguna) !== -1 ? " checked" : "") + "> " + esc(t.nama) + "</label>";
+        }).join("") +
+        '</div><span class="ag-bantu">Pengingatnya ikut muncul di Jadwal mereka. Mereka bisa mencentang selesai sendiri, tapi hanya kamu yang bisa mengubah atau menghapusnya.</span>'
+      : (SERVER.ada ? '<p class="ag-bantu">Belum ada akun lain untuk ditugaskan.</p>' : "")) +
     (pemilik()
       ? '<label class="ag-umum"><input id="agBersama" type="checkbox"' + (a.bersama ? " checked" : "") +
         "> Umumkan ke semua akun</label>"
@@ -4702,7 +4759,10 @@ async function formAgenda(awal){
       var tgl = document.getElementById("agTgl").value;
       if(!tgl) return {galat:"Tanggal belum diisi."};
       var bs = document.getElementById("agBersama");
+      var untuk = Array.prototype.map.call(
+        document.querySelectorAll(".agUntuk:checked"), function(c){ return c.value; });
       return {nilai:{
+        untuk: untuk,
         judul: judul,
         tanggal: tgl,
         jam: document.getElementById("agJam").value || "",
@@ -4728,7 +4788,8 @@ function pasangJadwal(){
       var f = cariAgenda(b.dataset.agUbah);
       if(!f) return;
       var awal = {judul:f.a.judul, tanggal:f.a.tanggal, jam:f.a.jam || "",
-                  jenis:f.a.jenis, catatan:f.a.catatan || "", bersama:f.bersama};
+                  jenis:f.a.jenis, catatan:f.a.catatan || "", bersama:f.bersama,
+                  untuk:f.a.untuk || []};
       var n = await formAgenda(awal);
       if(!n) return;
       await tulisAgenda(b.dataset.agUbah, n);
@@ -4744,6 +4805,10 @@ function pasangJadwal(){
         db.agenda = (db.agenda || []).filter(function(x){ return x.id !== f.a.id; });
         simpan();
         await dorongAtur();
+      } else if(f.tugasan){
+        var jd = await srv("agendaTugasHapus", {id:f.a.id});
+        if(jd.galat){ toast(jd.galat); return; }
+        TUGASAN = jd.tugasan || [];
       } else {
         pribadi.agenda = agendaSaya().filter(function(x){ return x.id !== f.a.id; });
         simpanPribadi();
@@ -4757,8 +4822,8 @@ function pasangJadwal(){
     b.addEventListener("click", function(){
       var f = cariAgenda(b.dataset.agUsai);
       if(!f) return;
-      if(f.bersama){
-        // Agenda bersama dicentang per akun, bukan untuk semua orang.
+      if(f.bersama || f.tugasan){
+        // Dicentang per akun, bukan untuk semua orang yang menerimanya.
         var m = agendaSelesai();
         if(m[f.a.id]) delete m[f.a.id]; else m[f.a.id] = true;
       } else {
@@ -4775,10 +4840,34 @@ async function tulisAgenda(id, n){
              jam:n.jam, jenis:n.jenis, catatan:n.catatan};
   var lama = id ? cariAgenda(id) : null;
 
-  // Pindah antara bersama dan pribadi berarti dicabut dulu dari asalnya.
+  var adaTugasan = (n.untuk || []).length > 0;
+
+  // Pindah antar jenis berarti dicabut dulu dari asalnya, supaya tidak
+  // muncul dobel di dua tempat.
   if(lama){
     if(lama.bersama) db.agenda = (db.agenda || []).filter(function(x){ return x.id !== id; });
+    else if(lama.tugasan){
+      if(!adaTugasan || n.bersama){
+        var jh = await srv("agendaTugasHapus", {id:id});
+        if(jh.galat){ toast(jh.galat); return; }
+        TUGASAN = jh.tugasan || [];
+      }
+    }
     else pribadi.agenda = agendaSaya().filter(function(x){ return x.id !== id; });
+  }
+
+  if(adaTugasan && !n.bersama){
+    if(!SERVER.ada){
+      toast("Menugaskan ke teman butuh sambungan ke server.");
+      return;
+    }
+    obj.untuk = n.untuk;
+    var jt = await srv("agendaTugas", {agenda:obj});
+    if(jt.galat){ toast(jt.galat); return; }
+    TUGASAN = jt.tugasan || [];
+    render();
+    toast(id ? "Pengingat diperbarui." : "Pengingat dikirim ke " + n.untuk.length + " orang.");
+    return;
   }
 
   if(n.bersama && pemilik()){
@@ -6214,6 +6303,8 @@ function pasangArsipServer(arsip){
   terapkanIkon();
 }
 
+function pasangTugasan(t){ TUGASAN = Array.isArray(t) ? t : []; }
+
 function pasangAkunServer(a){
   SERVER.akun = a || null;
   if(!a){ setSesi(null); return; }
@@ -6329,7 +6420,14 @@ function layarMasuk(pesanAwal){
     setToken(j.token);
     pasangAkunServer(j.akun);
     pasangArsipServer(j.arsip);
-    if(j.pribadi && typeof j.pribadi === "object") pribadi = j.pribadi;
+    // Mulai dari kosong kalau server belum punya apa-apa untuk akun ini;
+    // kalau tidak, catatan pribadi pemakai sebelumnya di perangkat yang sama
+    // ikut terbawa ke akun yang baru masuk.
+    pribadi = (j.pribadi && typeof j.pribadi === "object") ? j.pribadi : pribadiKosong();
+    // Sesi baru berarti daftar akun dan tugasan lama sudah tidak relevan.
+    DAFTAR_AKUN = null;
+    var jt = await srv("muat", {});
+    if(!jt.galat) pasangTugasan(jt.tugasan);
     g.remove();
     document.querySelector(".app").style.display = "";
     terapkanTema();
@@ -6360,7 +6458,8 @@ function adaPublik(){
     SERVER.ada = true;
     pasangAkunServer(awal.akun);
     pasangArsipServer(awal.arsip);
-    if(awal.pribadi && typeof awal.pribadi === "object") pribadi = awal.pribadi;
+    pribadi = (awal.pribadi && typeof awal.pribadi === "object") ? awal.pribadi : pribadiKosong();
+    pasangTugasan(awal.tugasan);
     muatPribadi.terpakai = true;
     terapkanTema();
 
