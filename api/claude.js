@@ -29,6 +29,40 @@
 var KUNCI_API = process.env.ANTHROPIC_API_KEY || "";
 var MODEL = process.env.CLAUDE_MODEL || "claude-opus-5";
 var EFFORT = process.env.CLAUDE_EFFORT || "medium";
+
+/* Gemini sebagai penyedia alternatif. Nama variabelnya dibuat longgar
+   karena orang menamainya bermacam-macam saat menempel di Vercel. */
+var KUNCI_GEMINI = process.env.GEMINI_API_KEY ||
+                   process.env.GOOGLE_API_KEY ||
+                   process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
+                   process.env.GOOGLE_AI_API_KEY || "";
+var MODEL_GEMINI = process.env.GEMINI_MODEL || "gemini-2.5-pro";
+
+/* Kalau dua-duanya terpasang, AI_PENYEDIA yang menentukan. Kalau tidak
+   diisi, yang ada kuncinya yang dipakai \u2014 Anthropic lebih dulu. */
+var PENYEDIA = (function () {
+  var pilih = String(process.env.AI_PENYEDIA || "").toLowerCase();
+  if (pilih === "gemini" && KUNCI_GEMINI) return "gemini";
+  if (pilih === "claude" && KUNCI_API) return "claude";
+  if (KUNCI_API) return "claude";
+  if (KUNCI_GEMINI) return "gemini";
+  return "";
+})();
+
+var NAMA_AI = PENYEDIA === "gemini" ? "Gemini" : "Claude";
+
+/* Skema JSON kita memakai additionalProperties, yang ditolak Gemini.
+   Buang kunci yang tidak dikenalnya, jangan kirim apa adanya. */
+function skemaGemini(x) {
+  if (Array.isArray(x)) return x.map(skemaGemini);
+  if (!x || typeof x !== "object") return x;
+  var keluar = {};
+  Object.keys(x).forEach(function (k) {
+    if (k === "additionalProperties" || k === "$schema") return;
+    keluar[k] = skemaGemini(x[k]);
+  });
+  return keluar;
+}
 var BATAS_HARIAN = parseInt(process.env.BATAS_AI_HARIAN || "30", 10) || 30;
 var MAKS_MASUKAN = 60000;
 
@@ -223,8 +257,11 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ galat: "Metode tidak didukung." });
   }
 
-  if (!KUNCI_API) {
-    return res.status(200).json({ mati: true, catatan: "ANTHROPIC_API_KEY belum diatur." });
+  if (!PENYEDIA) {
+    return res.status(200).json({
+      mati: true,
+      catatan: "Belum ada kunci AI. Atur ANTHROPIC_API_KEY atau GEMINI_API_KEY di Vercel."
+    });
   }
 
   var akunSah = daftarAkun();
@@ -303,7 +340,7 @@ module.exports = async function handler(req, res) {
     return res.status(401).json({ galat: "Akun tidak dikenali." });
   }
   if (!info.ai) {
-    return res.status(403).json({ galat: "Akun ini tidak diberi izin memakai Claude." });
+    return res.status(403).json({ galat: "Akun ini tidak diberi izin memakai " + NAMA_AI + "." });
   }
 
   try {
@@ -319,78 +356,165 @@ module.exports = async function handler(req, res) {
     // Lampiran: gambar (foto slide, papan tulis, halaman buku) dan PDF
     // dibaca langsung oleh model. PPT dan Word sudah diubah jadi teks di
     // sisi browser, jadi tidak pernah sampai ke sini sebagai berkas.
-    var isiPesan = [];
-    for (var li = 0; li < lampiran.length; li++) {
-      var lp = lampiran[li];
-      if (lp.jenis === "gambar") {
-        isiPesan.push({
-          type: "image",
-          source: { type: "base64", media_type: lp.mime, data: lp.data }
-        });
-      } else {
-        isiPesan.push({
-          type: "document",
-          source: { type: "base64", media_type: "application/pdf", data: lp.data }
+    var teks = "";
+    var pemakaian = null;
+
+    if (PENYEDIA === "gemini") {
+      // Gemini menerima gambar dan PDF lewat inline_data dengan muatan
+      // base64 yang sama persis, jadi lampirannya tidak perlu diolah ulang.
+      var bagian = [];
+      for (var gi = 0; gi < lampiran.length; gi++) {
+        var lg = lampiran[gi];
+        bagian.push({
+          inline_data: {
+            mime_type: lg.jenis === "gambar" ? lg.mime : "application/pdf",
+            data: lg.data
+          }
         });
       }
-    }
-    isiPesan.push({ type: "text", text: materi });
+      bagian.push({ text: materi });
 
-    var badan = {
-      model: MODEL,
-      max_tokens: 16000,
-      system: t.sistem,
-      output_config: {
-        effort: EFFORT,
-        format: { type: "json_schema", schema: t.skema }
-      },
-      messages: [{ role: "user", content: isiPesan }]
-    };
+      var badanG = {
+        contents: [{ role: "user", parts: bagian }],
+        systemInstruction: { parts: [{ text: t.sistem }] },
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: skemaGemini(t.skema),
+          maxOutputTokens: 16000
+        }
+      };
 
-    var r = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": KUNCI_API,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json"
-      },
-      body: JSON.stringify(badan)
-    });
+      var rg = await fetch(
+        "https://generativelanguage.googleapis.com/v1beta/models/" +
+          encodeURIComponent(MODEL_GEMINI) + ":generateContent",
+        {
+          method: "POST",
+          headers: {
+            "x-goog-api-key": KUNCI_GEMINI,
+            "content-type": "application/json"
+          },
+          body: JSON.stringify(badanG)
+        }
+      );
+      var jg = await rg.json();
 
-    var j = await r.json();
+      if (!rg.ok) {
+        // Pesan aslinya diteruskan: kalau nama modelnya salah, di situlah
+        // satu-satunya petunjuk yang berguna buat pemakai.
+        var pesanG = (jg && jg.error && jg.error.message) || ("Gemini menjawab " + rg.status);
+        return res.status(502).json({
+          galat: pesanG + (rg.status === 404
+            ? " (ganti nama modelnya lewat variabel GEMINI_MODEL di Vercel)" : "")
+        });
+      }
+      if (jg.promptFeedback && jg.promptFeedback.blockReason) {
+        return res.status(200).json({
+          galat: "Gemini menolak memproses materi ini (" + jg.promptFeedback.blockReason + ")."
+        });
+      }
 
-    if (!r.ok) {
-      var pesan = (j && j.error && j.error.message) || ("Claude menjawab " + r.status);
-      return res.status(502).json({ galat: pesan });
-    }
-
-    // Klasifikasi keamanan bisa menolak; cek sebelum membaca isi.
-    if (j.stop_reason === "refusal") {
-      return res.status(200).json({
-        galat: "Claude menolak memproses materi ini." +
-          (j.stop_details && j.stop_details.category ? " (" + j.stop_details.category + ")" : "")
+      var kandidat = (jg.candidates || [])[0];
+      if (!kandidat) {
+        return res.status(502).json({ galat: "Gemini tidak mengembalikan jawaban." });
+      }
+      if (kandidat.finishReason === "MAX_TOKENS") {
+        return res.status(200).json({
+          galat: "Jawabannya terpotong karena terlalu panjang. Potong materinya jadi beberapa bagian."
+        });
+      }
+      if (kandidat.finishReason === "SAFETY" || kandidat.finishReason === "PROHIBITED_CONTENT") {
+        return res.status(200).json({ galat: "Gemini menolak memproses materi ini." });
+      }
+      ((kandidat.content && kandidat.content.parts) || []).forEach(function (bg) {
+        if (typeof bg.text === "string") teks += bg.text;
       });
-    }
-    if (j.stop_reason === "max_tokens") {
-      return res.status(200).json({
-        galat: "Jawabannya terpotong karena terlalu panjang. Potong materinya jadi beberapa bagian."
-      });
-    }
+      if (jg.usageMetadata) {
+        pemakaian = jg.usageMetadata.promptTokenCount + " masuk / " +
+                    jg.usageMetadata.candidatesTokenCount + " keluar";
+      }
 
-    var teks = "";
-    (j.content || []).forEach(function (blok) {
-      if (blok.type === "text") teks += blok.text;
-    });
+    } else {
+      // Lampiran: gambar (foto slide, papan tulis, halaman buku) dan PDF
+      // dibaca langsung oleh model. PPT dan Word sudah diubah jadi teks di
+      // sisi browser, jadi tidak pernah sampai ke sini sebagai berkas.
+      var isiPesan = [];
+      for (var li = 0; li < lampiran.length; li++) {
+        var lp = lampiran[li];
+        if (lp.jenis === "gambar") {
+          isiPesan.push({
+            type: "image",
+            source: { type: "base64", media_type: lp.mime, data: lp.data }
+          });
+        } else {
+          isiPesan.push({
+            type: "document",
+            source: { type: "base64", media_type: "application/pdf", data: lp.data }
+          });
+        }
+      }
+      isiPesan.push({ type: "text", text: materi });
+
+      var badan = {
+        model: MODEL,
+        max_tokens: 16000,
+        system: t.sistem,
+        output_config: {
+          effort: EFFORT,
+          format: { type: "json_schema", schema: t.skema }
+        },
+        messages: [{ role: "user", content: isiPesan }]
+      };
+
+      var r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": KUNCI_API,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify(badan)
+      });
+
+      var j = await r.json();
+
+      if (!r.ok) {
+        var pesan = (j && j.error && j.error.message) || ("Claude menjawab " + r.status);
+        return res.status(502).json({ galat: pesan });
+      }
+
+      // Klasifikasi keamanan bisa menolak; cek sebelum membaca isi.
+      if (j.stop_reason === "refusal") {
+        return res.status(200).json({
+          galat: "Claude menolak memproses materi ini." +
+            (j.stop_details && j.stop_details.category ? " (" + j.stop_details.category + ")" : "")
+        });
+      }
+      if (j.stop_reason === "max_tokens") {
+        return res.status(200).json({
+          galat: "Jawabannya terpotong karena terlalu panjang. Potong materinya jadi beberapa bagian."
+        });
+      }
+
+      (j.content || []).forEach(function (blok) {
+        if (blok.type === "text") teks += blok.text;
+      });
+      if (j.usage) {
+        pemakaian = j.usage.input_tokens + " masuk / " + j.usage.output_tokens + " keluar";
+      }
+    }
 
     var hasil;
     try { hasil = JSON.parse(teks); }
-    catch (e) { return res.status(502).json({ galat: "Balasan Claude tidak terbaca sebagai JSON." }); }
+    catch (e) {
+      return res.status(502).json({ galat: "Balasan " + NAMA_AI + " tidak terbaca sebagai JSON." });
+    }
 
     return res.status(200).json({
       hasil: hasil,
+      penyedia: NAMA_AI,
       pakai: kuota.pakai,
       batas: kuota.tanpaKuota ? null : kuota.batas,
-      token: j.usage ? (j.usage.input_tokens + " masuk / " + j.usage.output_tokens + " keluar") : null
+      token: pemakaian
     });
 
   } catch (err) {
