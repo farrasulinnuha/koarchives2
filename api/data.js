@@ -91,7 +91,7 @@ function akunAman(a) {
   return {
     pengguna: a.pengguna, nama: a.nama, peran: a.peran,
     tingkat: a.tingkat, exp: a.exp || "", aktif: a.aktif !== false,
-    ai: a.ai === true, dibuat: a.dibuat || ""
+    ai: a.ai === true, dibuat: a.dibuat || "", mandiri: a.mandiri === true
   };
 }
 
@@ -307,6 +307,55 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    /* ---- daftar sendiri ----
+       Sengaja tanpa token: ini justru jalannya orang yang belum punya akun.
+       Akun hasil pendaftaran SELALU pengakses bertingkat publik, apa pun
+       yang dikirim klien. Menaikkan aksesnya urusan pemilik lewat menu
+       Akun, dan itu yang jadi gerbang setelah orangnya membayar. */
+    if (aksi === "daftar") {
+      var bukaDaftar = await ambil("atur:pendaftaran", false);
+      if (bukaDaftar !== true) {
+        return res.status(403).json({ galat: "Pendaftaran sedang ditutup. Minta akun ke pemilik arsip." });
+      }
+      var pd = normalPengguna(b.pengguna);
+      if (pd.length < 3) {
+        return res.status(400).json({ galat: "Nama pengguna minimal 3 karakter, hanya huruf, angka, titik, dan strip." });
+      }
+      var sandiD = String(b.sandi || "");
+      if (sandiD.length < 8) {
+        return res.status(400).json({ galat: "Sandi minimal 8 karakter." });
+      }
+      if (await bacaAkun(pd)) {
+        return res.status(409).json({ galat: "Nama pengguna itu sudah dipakai. Coba yang lain." });
+      }
+      var daftarNama = await daftarPengguna();
+      if (daftarNama.length >= 500) {
+        return res.status(429).json({ galat: "Kuota akun sudah penuh. Hubungi pemilik arsip." });
+      }
+
+      var garamD = acakHex(16);
+      var akunBaru = {
+        pengguna: pd,
+        nama: String(b.nama || pd).slice(0, 120),
+        garam: garamD,
+        hash: olahSandi(sandiD, garamD),
+        peran: "pengakses",
+        tingkat: "publik",
+        exp: "",
+        aktif: true,
+        ai: false,
+        mandiri: true,
+        dibuat: new Date().toISOString().slice(0, 10)
+      };
+      await tulisAkun(akunBaru);
+      var tokenD = await buatSesi(pd);
+      return res.status(200).json({
+        token: tokenD, akun: akunAman(akunBaru),
+        arsip: saringUntuk(await bacaArsip(), akunBaru),
+        pribadi: null
+      });
+    }
+
     /* ---- semua aksi di bawah butuh token ---- */
     var akun = await akunDariToken(b.token);
 
@@ -318,6 +367,7 @@ module.exports = async function handler(req, res) {
         arsip: saringUntuk(arsipSemua, akun),
         pribadi: akun ? await ambil("pribadi:" + akun.pengguna, null) : null,
         tugasan: tugasanUntuk(await bacaTugasan(), akun),
+        pendaftaran: (await ambil("atur:pendaftaran", false)) === true,
         adaAkun: (await daftarPengguna()).length > 0
       });
     }
@@ -418,6 +468,7 @@ module.exports = async function handler(req, res) {
       if (b.staseGambar) await simpan("arsip:staseGambar", b.staseGambar);
       if (typeof b.ikon === "string") await simpan("arsip:ikon", b.ikon);
       if (Array.isArray(b.berkas)) await simpan("arsip:berkas", b.berkas.slice(0, 1000));
+      if (typeof b.pendaftaran === "boolean") await simpan("atur:pendaftaran", b.pendaftaran);
       // Agenda bersama diumumkan pemilik dan terlihat semua peran, jadi
       // ikut arsip, bukan ember pribadi tiap akun.
       if (Array.isArray(b.agenda)) await simpan("arsip:agenda", b.agenda.slice(0, 500));

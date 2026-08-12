@@ -1041,6 +1041,9 @@ input[type=file]{width:100%;padding:10px;border-radius:11px;border:1px dashed va
   margin-top:14px;padding-top:12px;border-top:1px solid var(--garis)}
 .ct-waktu{font-size:12.5px;font-weight:600;color:var(--redup)}
 .ct-aksi{display:flex;gap:6px}
+.tautan-teks{background:none;border:0;padding:0;cursor:pointer;font:inherit;font-weight:800;
+  color:var(--a2);text-decoration:underline;text-underline-offset:3px}
+.tautan-teks:hover{opacity:.8}
 .ag-teman{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px;max-height:170px;overflow:auto}
 .ag-orang{display:inline-flex;align-items:center;gap:7px;padding:7px 11px;border-radius:100px;
   border:1px solid var(--garis);background:rgba(var(--kaca),.6);cursor:pointer;
@@ -6137,6 +6140,13 @@ function viewAtur(){
 
   // --- akun di server: dikelola sendiri, tanpa menerbitkan ulang situs ---
   if(SERVER.ada){
+    h += '<section class="kotak kaca"><h2>Pendaftaran mandiri</h2>';
+    h += "<p>Kalau dibuka, siapa pun bisa membuat akun sendiri dari layar masuk. Akun baru selalu jadi <b>pengakses tingkat publik</b> \u2014 hanya bisa membaca materi gratis. Naikkan aksesnya lewat daftar akun di bawah setelah orangnya membayar.</p>";
+    h += '<label class="pilih-baris" style="margin-top:12px"><input type="checkbox" id="aturDaftar"' +
+         (PENDAFTARAN_BUKA ? " checked" : "") + "> Izinkan orang mendaftar sendiri</label>";
+    h += '<span class="bantu">Selama ditutup, hanya kamu yang bisa membuatkan akun.</span>';
+    h += "</section>";
+
     h += '<section class="kotak kaca"><h2>Akun</h2>';
     h += "<p>Tersimpan di server. Menambah atau mencabut akun langsung berlaku &mdash; situsnya tidak perlu diterbitkan ulang, dan isi arsip tidak ikut terpengaruh.</p>";
     h += '<div class="borang" style="margin-bottom:18px"><div class="borang-kisi">';
@@ -6483,6 +6493,19 @@ async function dorongAtur(){
 
 function pasangAtur(){
   if(SERVER.ada) pasangAkunServerUi();
+
+  var swDaftar = document.getElementById("aturDaftar");
+  if(swDaftar) swDaftar.addEventListener("change", async function(){
+    var mau = swDaftar.checked;
+    swDaftar.disabled = true;
+    var j = await srv("aturSimpan", {pendaftaran:mau});
+    swDaftar.disabled = false;
+    if(j.galat){ swDaftar.checked = !mau; toast(j.galat); return; }
+    PENDAFTARAN_BUKA = mau;
+    if(j.arsip) pasangArsipServer(j.arsip);
+    toast(mau ? "Pendaftaran dibuka. Akun baru dapat akses gratis saja."
+              : "Pendaftaran ditutup.");
+  });
 
   document.getElementById("simpanTeks").addEventListener("click", function(){
     Array.prototype.forEach.call(panggung.querySelectorAll("[data-teks]"), function(el){
@@ -7286,6 +7309,9 @@ async function cekClaude(){
   return claudeSiap;
 }
 
+/* true kalau server mengizinkan orang mendaftar sendiri. Diisi saat muat. */
+var PENDAFTARAN_BUKA = false;
+
 function layarMasuk(pesanAwal){
   if(document.getElementById("gerbangKunci")) return;
   var g = document.createElement("div");
@@ -7296,32 +7322,69 @@ function layarMasuk(pesanAwal){
       '<div style="width:46px;height:46px;border-radius:15px;background:linear-gradient(135deg,var(--a1),var(--a3));display:grid;place-items:center;color:var(--atas-aksen);font-family:var(--f-tampil);font-weight:800;font-size:19px;margin-bottom:14px">' +
         esc(T("lambang").slice(0,2)) + "</div>" +
       "<h2>" + esc(T("judul")) + "</h2>" +
-      "<p>Masuk dengan akunmu untuk membuka arsip.</p>" +
+      '<p id="kajak">Masuk dengan akunmu untuk membuka arsip.</p>' +
+      '<div class="b" id="kotakNama" style="display:none"><label for="knama">Nama panggilan</label>' +
+      '<input id="knama" type="text" autocomplete="name" placeholder="yang muncul di jadwal bersama"></div>' +
       '<div class="b"><label for="kuser">Nama pengguna</label>' +
       '<input id="kuser" type="text" autocomplete="username" autocapitalize="none" spellcheck="false"></div>' +
       '<div class="b"><label for="ksandi">Sandi</label>' +
       '<input id="ksandi" type="password" autocomplete="current-password"></div>' +
       '<div class="gerbang-galat" id="kgalat" role="alert">' + esc(pesanAwal || "") + "</div>" +
       '<div class="kotak-aksi"><button class="t utama" type="submit" id="kbuka">Masuk</button></div>' +
-      '<p style="font-size:12px;color:var(--redup);margin:16px 0 0;line-height:1.5">Belum punya akun? Hubungi pemilik arsip.</p>' +
+      '<p id="kalih" style="font-size:12px;color:var(--redup);margin:16px 0 0;line-height:1.5">Belum punya akun? Hubungi pemilik arsip.</p>' +
     "</form>";
   document.body.appendChild(g);
 
   var inpU = document.getElementById("kuser");
   var inpS = document.getElementById("ksandi");
+  var inpN = document.getElementById("knama");
+  var modeDaftar = false;
   inpU.focus();
+
+  function segarkanAjakan(){
+    var alih = document.getElementById("kalih");
+    document.getElementById("kotakNama").style.display = modeDaftar ? "" : "none";
+    document.getElementById("kbuka").textContent = modeDaftar ? "Buat akun" : "Masuk";
+    document.getElementById("kajak").textContent = modeDaftar
+      ? "Buat akun sendiri. Akun baru langsung bisa membaca materi gratis; untuk yang berbayar, minta pemilik menaikkan aksesmu."
+      : "Masuk dengan akunmu untuk membuka arsip.";
+    inpS.autocomplete = modeDaftar ? "new-password" : "current-password";
+    if(!PENDAFTARAN_BUKA){
+      alih.textContent = "Belum punya akun? Hubungi pemilik arsip.";
+      return;
+    }
+    alih.innerHTML = modeDaftar
+      ? 'Sudah punya akun? <button type="button" class="tautan-teks" id="kalihBalik">Masuk saja</button>'
+      : 'Belum punya akun? <button type="button" class="tautan-teks" id="kalihDaftar">Daftar sendiri</button>';
+    var bd = document.getElementById("kalihDaftar") || document.getElementById("kalihBalik");
+    if(bd) bd.addEventListener("click", function(){
+      modeDaftar = !modeDaftar;
+      document.getElementById("kgalat").textContent = "";
+      segarkanAjakan();
+      (modeDaftar ? inpN : inpU).focus();
+    });
+  }
+  segarkanAjakan();
 
   document.getElementById("kform").addEventListener("submit", async function(ev){
     ev.preventDefault();
     var galat = document.getElementById("kgalat");
     var tombol = document.getElementById("kbuka");
     if(!inpU.value.trim() || !inpS.value){ galat.textContent = "Nama pengguna dan sandi harus diisi."; return; }
+    if(modeDaftar && inpS.value.length < 8){
+      galat.textContent = "Sandi minimal 8 karakter."; inpS.focus(); return;
+    }
 
-    tombol.disabled = true; tombol.textContent = "Masuk\u2026"; galat.textContent = "";
-    var j = await srv("masuk", {pengguna:inpU.value, sandi:inpS.value});
-    tombol.disabled = false; tombol.textContent = "Masuk";
+    var labelAsli = tombol.textContent;
+    tombol.disabled = true;
+    tombol.textContent = modeDaftar ? "Membuat\u2026" : "Masuk\u2026";
+    galat.textContent = "";
+    var j = modeDaftar
+      ? await srv("daftar", {pengguna:inpU.value, sandi:inpS.value, nama:inpN.value})
+      : await srv("masuk", {pengguna:inpU.value, sandi:inpS.value});
+    tombol.disabled = false; tombol.textContent = labelAsli;
 
-    if(j.galat){ galat.textContent = j.galat; inpS.select(); return; }
+    if(j.galat){ galat.textContent = j.galat; if(!modeDaftar) inpS.select(); return; }
     setToken(j.token);
     pasangAkunServer(j.akun);
     pasangArsipServer(j.arsip);
@@ -7337,7 +7400,9 @@ function layarMasuk(pesanAwal){
     document.querySelector(".app").style.display = "";
     terapkanTema();
     render();
-    toast("Selamat datang, " + (j.akun.nama || j.akun.pengguna) + ".");
+    toast(modeDaftar
+      ? "Akun dibuat. Selamat datang, " + (j.akun.nama || j.akun.pengguna) + "."
+      : "Selamat datang, " + (j.akun.nama || j.akun.pengguna) + ".");
   });
 }
 
@@ -7365,6 +7430,7 @@ function adaPublik(){
     pasangArsipServer(awal.arsip);
     pribadi = (awal.pribadi && typeof awal.pribadi === "object") ? awal.pribadi : pribadiKosong();
     pasangTugasan(awal.tugasan);
+    PENDAFTARAN_BUKA = awal.pendaftaran === true;
     pindahBerkasLama();
     muatPribadi.terpakai = true;
     terapkanTema();
