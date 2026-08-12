@@ -1011,6 +1011,20 @@ input[type=file]{width:100%;padding:10px;border-radius:11px;border:1px dashed va
 .tab-panel>h2:first-child{margin-top:0}
 .pilih-baris{display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:700}
 .pilih-baris input{width:auto;flex:none;margin:0}
+.bk-kepala{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.bk-kepala h2{margin:0}
+.bk-hitung{flex:none;padding:4px 11px;border-radius:100px;background:var(--garis);
+  font-size:13px;font-weight:800}
+.bk-kelar{background:var(--baik-latar);color:var(--baik)}
+.bk-bilah{height:7px;border-radius:100px;background:var(--garis);overflow:hidden;margin:12px 0 4px}
+.bk-bilah span{display:block;height:100%;border-radius:100px;
+  background:linear-gradient(90deg,var(--a1),var(--a3));transition:width .4s cubic-bezier(.2,.7,.3,1)}
+.bk-daftar{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.bk-item{display:flex;align-items:flex-start;gap:12px;padding:12px 13px;border-radius:13px;
+  border:1px solid var(--garis);background:rgba(var(--kaca),.5)}
+.bk-usai{opacity:.6}
+.bk-usai .ag-judul{text-decoration:line-through}
+@media (max-width:560px){.bk-item{flex-wrap:wrap}.bk-item .ag-aksi{width:100%;padding-left:36px}}
 .ct-saring{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px}
 .ct-chip{padding:7px 13px;border-radius:100px;cursor:pointer;border:1px solid var(--garis);
   background:rgba(var(--kaca),.55);color:var(--tinta);font:700 13px/1 var(--f-teks)}
@@ -1789,6 +1803,7 @@ function dbKosong(){
     staseUbah:[],
     entri:[],
     agenda:[],
+    berkas:[],
     seedTerlihat:[],
     skor:{},
     klarifikasi:[],
@@ -1821,6 +1836,7 @@ function muat(){
         d.staseUbah = Array.isArray(p.staseUbah) ? p.staseUbah : [];
         d.entri = Array.isArray(p.entri) ? p.entri : [];
         d.agenda = Array.isArray(p.agenda) ? p.agenda : [];
+        d.berkas = Array.isArray(p.berkas) ? p.berkas : [];
         d.seedTerlihat = Array.isArray(p.seedTerlihat) ? p.seedTerlihat : [];
         d.skor = p.skor && typeof p.skor === "object" ? p.skor : {};
         d.klarifikasi = Array.isArray(p.klarifikasi) ? p.klarifikasi : [];
@@ -2112,6 +2128,7 @@ var IKON = {
   balik:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
   main:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l13 8-13 8z"/></svg>',
   catatan:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5z"/><path d="M15 3v5h5M8.5 13h7M8.5 17h4"/></svg>',
+  berkas:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-3z"/><path d="m8.5 14 2 2 4-4"/></svg>',
   jadwal:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
   ipk:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
   tampilan:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="m3 14 4.5-4.5 3.5 3 3.5-3.5L21 14"/><circle cx="8.5" cy="8.5" r="1.2"/></svg>'
@@ -2330,7 +2347,7 @@ function soalKeTeks(list){
    ===================================================================== */
 
 var ui = {view:"arsip", stase:"semua", tipe:"semua", cari:"", entriId:null, kuis:null,
-          catatanStase:null, catatanCari:"", tab:0, tabEntri:null};
+          catatanStase:null, catatanCari:"", tab:0, tabEntri:null, berkasStase:null};
 var sunting = null;
 
 function sesi(){
@@ -2432,7 +2449,7 @@ function kunciPribadi(){ return KUNCI + "/pribadi/" + (penggunaAkun() || "tamu")
 
 function pribadiKosong(){
   return {latar:null, latarBuram:0, latarGelap:45, tema:null, ipk:null, skor:{}, klarifikasi:[],
-          agenda:[], agendaSelesai:{}, catatan:[]};
+          agenda:[], agendaSelesai:{}, catatan:[], berkasSelesai:{}};
 }
 
 function muatPribadi(){
@@ -2461,6 +2478,11 @@ function skorSaya(){
 /* Catatan pribadi ikut ember `pribadi` tiap akun. Ember itu hanya
    dikembalikan server kepada pemiliknya sendiri, jadi pemilik arsip pun
    tidak bisa membacanya. Jangan pernah memindahkannya ke `db`. */
+function berkasSelesai(){
+  if(!pribadi.berkasSelesai || typeof pribadi.berkasSelesai !== "object") pribadi.berkasSelesai = {};
+  return pribadi.berkasSelesai;
+}
+
 function catatanSaya(){
   if(!Array.isArray(pribadi.catatan)) pribadi.catatan = [];
   return pribadi.catatan;
@@ -2569,6 +2591,7 @@ function navItem(){
   // dan pemilik bisa mengumumkan agenda bersama.
   n.push({v:"jadwal", ik:"jadwal", nm:"Jadwal", lencana:jadwalMendesak()});
   n.push({v:"catatan", ik:"catatan", nm:"Catatan"});
+  n.push({v:"berkas", ik:"berkas", nm:"Berkas"});
   n.push({v:"ipk", ik:"ipk", nm:"IPK"});
   if(bisaTulis()) n.push({v:"editor", ik:"tambah", nm:"Tambah", sorot:true});
   if(pemilik()) n.push({v:"tinjauan", ik:"tinjau", nm:"Tinjauan", lencana:antrian().length});
@@ -2720,6 +2743,7 @@ function render(){
   else if(ui.view === "tinjauan") viewTinjauan();
   else if(ui.view === "jadwal") viewJadwal();
   else if(ui.view === "catatan") viewCatatan();
+  else if(ui.view === "berkas") viewBerkas();
   else if(ui.view === "ipk") viewIpk();
   else if(ui.view === "tampilan") viewTampilan();
   else if(ui.view === "alat") viewAlat();
@@ -3321,7 +3345,9 @@ function viewEditor(){
 
   h += '<div class="b"><label class="pilih-baris"><input type="checkbox" id="fTab"' +
        (e.tab === true ? " checked" : "") + '> Pecah jadi tab per sub-judul</label>' +
-       '<span class="bantu">Tiap baris yang diawali <code>##</code> jadi satu tab di halaman entri \u2014 berguna untuk materi panjang seperti pemeriksaan fisik, supaya tidak perlu dipecah jadi banyak entri.</span></div>';
+       '<span class="bantu">Tiap baris yang diawali <code>##</code> jadi satu tab di halaman entri \u2014 berguna untuk materi panjang seperti pemeriksaan fisik, supaya tidak perlu dipecah jadi banyak entri.</span>' +
+       '<div class="kotak-aksi" style="margin-top:9px"><button class="t kcl" id="fTabBaru" type="button">+ Tab baru</button>' +
+       '<span id="fTabDaftar" class="bantu" style="align-self:center"></span></div></div>';
 
   h += '<div class="b"><label>Lampiran &amp; tautan</label>';
   h += '<div id="lamSunting" class="lam-sunting"></div>';
@@ -3441,6 +3467,40 @@ function viewEditor(){
       }
     });
   }
+
+  // Pemantik tab: menyisipkan kerangka "## Judul" supaya tidak perlu hafal
+  // sintaksnya, dan menunjukkan tab apa saja yang sudah terbaca.
+  var taIsi = document.getElementById("fIsi");
+  var cTab = document.getElementById("fTab");
+
+  function segarkanDaftarTab(){
+    var el = document.getElementById("fTabDaftar");
+    if(!el) return;
+    var bag = pecahBagian(taIsi.value).bagian;
+    if(!cTab.checked){ el.textContent = "Centang dulu untuk memakai tab."; return; }
+    el.textContent = bag.length
+      ? bag.length + " tab: " + bag.map(function(b){ return b.judul; }).join(" \u00B7 ")
+      : "Belum ada tab. Tambahkan minimal dua.";
+  }
+  segarkanDaftarTab();
+  taIsi.addEventListener("input", segarkanDaftarTab);
+  cTab.addEventListener("change", segarkanDaftarTab);
+
+  var btTabBaru = document.getElementById("fTabBaru");
+  if(btTabBaru) btTabBaru.addEventListener("click", async function(){
+    var judul = await mintaTeks("Tab baru", "Nama tab",
+      {placeholder:"mis. Pemeriksaan nistagmus", ok:"Sisipkan"});
+    if(judul === null) return;
+    judul = judul.trim();
+    if(!judul) return;
+    if(!cTab.checked) cTab.checked = true;
+    var isiLama = taIsi.value.replace(/\s+$/, "");
+    taIsi.value = (isiLama ? isiLama + "\n\n" : "") + "## " + judul + "\n";
+    taIsi.focus();
+    taIsi.setSelectionRange(taIsi.value.length, taIsi.value.length);
+    taIsi.scrollTop = taIsi.scrollHeight;
+    segarkanDaftarTab();
+  });
 
   var inpBerkasE = document.getElementById("fBerkas");
   if(inpBerkasE) inpBerkasE.addEventListener("change", async function(){
@@ -3730,7 +3790,13 @@ function viewAlat(){
     h += "</select></div>";
     h += '<div class="kotak-aksi"><button class="t utama" id="susunOutline" type="button">Susun jadi outline</button>';
     h += '<button class="t utama" id="susunKuis" type="button">Jadikan kuis</button>';
+    h += '<button class="t" id="jalanOcr" type="button">Baca teks (OCR)</button>';
     h += '<span id="claudeKabar" style="font-size:13px;color:var(--redup);align-self:center"></span></div>';
+    h += '<div class="b" id="kotakOcr" style="display:none"><label for="hasilOcr">Hasil bacaan</label>';
+    h += '<textarea id="hasilOcr" placeholder="Teks hasil OCR akan muncul di sini."></textarea>';
+    h += '<div class="kotak-aksi"><button class="t" id="ocrSalin" type="button">Salin</button>';
+    h += '<button class="t" id="ocrKeBahan" type="button">Pindahkan ke kotak materi</button>';
+    h += '<span id="ocrKabar" class="bantu" style="align-self:center"></span></div></div>';
     h += "</section>";
   }
 
@@ -3861,12 +3927,47 @@ function viewAlat(){
     gambarLampiran();
   });
 
+  /* OCR jalannya beda dari yang lain: hasilnya teks mentah untuk dibaca
+     dan disunting sendiri, bukan entri yang langsung masuk arsip. */
+  function jalankanOcr(tombol){
+    var kabar = document.getElementById("claudeKabar");
+    if(!lampiranClaude.length){ toast("Unggah dulu foto atau PDF yang mau dibaca."); return; }
+    var semua = ["susunOutline","susunKuis","jalanOcr"].map(function(id){ return document.getElementById(id); });
+    semua.forEach(function(b){ if(b) b.disabled = true; });
+    var labelAsli = tombol.textContent;
+    tombol.textContent = "Membaca\u2026";
+    kabar.textContent = "Ini bisa sampai satu menit.";
+    kabar.style.color = "var(--redup)";
+
+    mintaClaude("ocr", document.getElementById("bahanClaude").value, lampiranClaude).then(function(r){
+      semua.forEach(function(b){ if(b) b.disabled = false; });
+      tombol.textContent = labelAsli;
+      if(!r.ok){
+        kabar.textContent = r.mati ? "Sambungan ke Claude belum aktif." : r.pesan;
+        kabar.style.color = "var(--buruk)";
+        return;
+      }
+      var teks = (r.hasil && r.hasil.teks) || "";
+      if(!teks.trim()){
+        kabar.textContent = "Tidak ada teks yang terbaca di berkas itu.";
+        kabar.style.color = "var(--buruk)";
+        return;
+      }
+      document.getElementById("kotakOcr").style.display = "";
+      document.getElementById("hasilOcr").value = teks;
+      document.getElementById("ocrKabar").textContent =
+        (r.hasil.catatan || "").trim() || "Periksa dulu sebelum dipakai.";
+      kabar.textContent = "Selesai dibaca.";
+      kabar.style.color = "var(--baik)";
+    });
+  }
+
   function jalankanClaude(tugas, tombol){
     var bahan = document.getElementById("bahanClaude").value;
     var kabar = document.getElementById("claudeKabar");
     if(!bahan.trim() && !lampiranClaude.length){ toast("Tempel materinya dulu, atau unggah berkas."); return; }
 
-    var semua = ["susunOutline","susunKuis"].map(function(id){ return document.getElementById(id); });
+    var semua = ["susunOutline","susunKuis","jalanOcr"].map(function(id){ return document.getElementById(id); });
     semua.forEach(function(b){ if(b) b.disabled = true; });
     var labelAsli = tombol.textContent;
     tombol.textContent = "Menyusun\u2026";
@@ -3918,6 +4019,23 @@ function viewAlat(){
   if(bO) bO.addEventListener("click", function(){ jalankanClaude("outline", bO); });
   var bK = document.getElementById("susunKuis");
   if(bK) bK.addEventListener("click", function(){ jalankanClaude("kuis", bK); });
+
+  var bOcr = document.getElementById("jalanOcr");
+  if(bOcr) bOcr.addEventListener("click", function(){ jalankanOcr(bOcr); });
+
+  var bOcrSalin = document.getElementById("ocrSalin");
+  if(bOcrSalin) bOcrSalin.addEventListener("click", function(){
+    salin(document.getElementById("hasilOcr").value, "Teks hasil OCR disalin.");
+  });
+
+  var bOcrPindah = document.getElementById("ocrKeBahan");
+  if(bOcrPindah) bOcrPindah.addEventListener("click", function(){
+    var ta = document.getElementById("bahanClaude");
+    var lama = ta.value.replace(/\s+$/, "");
+    ta.value = (lama ? lama + "\n\n" : "") + document.getElementById("hasilOcr").value;
+    ta.focus();
+    toast("Dipindahkan. Sekarang bisa disusun jadi outline atau kuis.");
+  });
 
   var cpO = document.getElementById("cpOutline");
   if(cpO) cpO.addEventListener("click", function(){ salin(promptOutline(), "Pemicu outline disalin."); });
@@ -5348,6 +5466,202 @@ function pasangCatatan(){
   });
 }
 
+/* =====================================================================
+   11e. Checklist berkas per stase, dipecah per rumah sakit
+   ===================================================================== */
+
+/* Daftarnya milik bersama (disusun pemilik), tapi centangnya milik tiap
+   akun. Jadi satu daftar syarat dipakai bareng, sementara progres tiap
+   orang tetap terpisah. */
+function daftarBerkas(){
+  if(!Array.isArray(db.berkas)) db.berkas = [];
+  return db.berkas;
+}
+
+function berkasStase(){
+  var urut = [];
+  var lihat = {};
+  daftarBerkas().forEach(function(b){
+    if(lihat[b.stase]) return;
+    lihat[b.stase] = true;
+    urut.push(b.stase);
+  });
+  return urut;
+}
+
+function viewBerkas(){
+  var semua = daftarBerkas();
+  var stasePakai = berkasStase();
+  if(ui.berkasStase && stasePakai.indexOf(ui.berkasStase) === -1) ui.berkasStase = null;
+  var aktif = ui.berkasStase || stasePakai[0] || null;
+
+  var h = bilahAtas();
+  h += '<section class="lembar kaca"><h1 class="judul-besar">Checklist berkas</h1>';
+  h += '<p style="color:var(--redup);font-size:14px;margin:10px 0 0;max-width:62ch">Syarat berkas tiap stase, dipisah per rumah sakit. Daftarnya disusun pemilik supaya sama untuk semua orang, tapi centangnya milik akunmu sendiri \u2014 tidak ada yang bisa melihat progresmu.</p>';
+  if(pemilik()){
+    h += '<div class="kotak-aksi"><button class="t utama" id="bkTambah" type="button">+ Berkas</button></div>';
+  }
+
+  if(stasePakai.length){
+    h += '<div class="ct-saring">';
+    stasePakai.forEach(function(id){
+      var st = cariStase(id);
+      var punya = semua.filter(function(b){ return b.stase === id; });
+      var usai = punya.filter(function(b){ return berkasSelesai()[b.id]; }).length;
+      h += '<button class="ct-chip' + (id === aktif ? " nyala" : "") +
+           '" type="button" data-bk-stase="' + esc(id) + '">' + esc(st.nama) +
+           " <b>" + usai + "/" + punya.length + "</b></button>";
+    });
+    h += "</div>";
+  }
+  h += "</section>";
+
+  if(!semua.length){
+    h += '<section class="kotak kaca"><div class="sepi-kotak" style="padding:32px"><b>Belum ada checklist</b><span>' +
+         (pemilik() ? "Tambahkan syarat berkas pertama, misalnya logbook atau laporan kasus."
+                    : "Pemilik arsip belum menyusun daftar syarat berkas.") + "</span></div></section>";
+    panggung.innerHTML = h;
+    pasangCari();
+    pasangBerkas();
+    return;
+  }
+
+  var isiStase = semua.filter(function(b){ return b.stase === aktif; });
+  var rs = [];
+  var lihatRs = {};
+  isiStase.forEach(function(b){
+    var nama = b.rs || "Tanpa rumah sakit";
+    if(lihatRs[nama]) return;
+    lihatRs[nama] = true;
+    rs.push(nama);
+  });
+  rs.sort();
+
+  rs.forEach(function(nama){
+    var punya = isiStase.filter(function(b){ return (b.rs || "Tanpa rumah sakit") === nama; });
+    var usai = punya.filter(function(b){ return berkasSelesai()[b.id]; }).length;
+    var pct = punya.length ? Math.round(usai / punya.length * 100) : 0;
+
+    h += '<section class="kotak kaca">';
+    h += '<div class="bk-kepala"><h2>' + esc(nama) + "</h2>";
+    h += '<span class="bk-hitung' + (usai === punya.length ? " bk-kelar" : "") + '">' + usai + " / " + punya.length + "</span></div>";
+    h += '<div class="bk-bilah"><span style="width:' + pct + '%"></span></div>';
+    h += '<ul class="bk-daftar">';
+    punya.forEach(function(b){
+      var ok = berkasSelesai()[b.id] === true;
+      h += '<li class="bk-item' + (ok ? " bk-usai" : "") + '">';
+      h += '<button class="ag-centang" type="button" data-bk-usai="' + esc(b.id) + '" role="checkbox" aria-checked="' +
+           (ok ? "true" : "false") + '" aria-label="Tandai ' + esc(b.judul) + ' selesai">' + (ok ? "\u2713" : "") + "</button>";
+      h += '<div class="ag-isi"><div class="ag-judul">' + esc(b.judul) + "</div>";
+      if(b.catatan) h += '<div class="ag-catatan">' + esc(b.catatan) + "</div>";
+      h += "</div>";
+      if(pemilik()){
+        h += '<div class="ag-aksi"><button class="t kcl" type="button" data-bk-ubah="' + esc(b.id) + '">Ubah</button>';
+        h += '<button class="t kcl" type="button" data-bk-hapus="' + esc(b.id) + '">Hapus</button></div>';
+      }
+      h += "</li>";
+    });
+    h += "</ul></section>";
+  });
+
+  panggung.innerHTML = h;
+  pasangCari();
+  pasangBerkas();
+}
+
+async function formBerkas(awal){
+  var b = awal || {judul:"", stase:(semuaStase()[0] || {}).id || "ipd", rs:"", catatan:""};
+  // Rumah sakit yang sudah pernah dipakai ditawarkan lagi supaya namanya
+  // tidak tertulis beda-beda dan berkasnya terpecah jadi dua kelompok.
+  var rsPernah = [];
+  daftarBerkas().forEach(function(x){
+    if(x.rs && rsPernah.indexOf(x.rs) === -1) rsPernah.push(x.rs);
+  });
+
+  var isi =
+    '<label class="dl">Nama berkas</label>' +
+    '<input id="bkJudul" type="text" maxlength="160" value="' + esc(b.judul) + '" placeholder="mis. Logbook tindakan">' +
+    '<label class="dl">Stase</label><select id="bkStase">' +
+      semuaStase().map(function(st){
+        return '<option value="' + esc(st.id) + '"' + (st.id === b.stase ? " selected" : "") + ">" + esc(st.nama) + "</option>";
+      }).join("") + "</select>" +
+    '<label class="dl">Rumah sakit</label>' +
+    '<input id="bkRs" type="text" maxlength="120" list="bkRsPernah" value="' + esc(b.rs) + '" placeholder="mis. RSUP Dr. Sardjito">' +
+    '<datalist id="bkRsPernah">' + rsPernah.map(function(n){ return '<option value="' + esc(n) + '">'; }).join("") + "</datalist>" +
+    '<label class="dl">Keterangan (boleh kosong)</label>' +
+    '<input id="bkCatatan" type="text" maxlength="240" value="' + esc(b.catatan || "") + '" placeholder="mis. minimal 10 tindakan, ttd konsulen">';
+
+  return await dialog({
+    judul: awal ? "Ubah berkas" : "Berkas baru",
+    jenis:"borang", isi:isi, ok: awal ? "Simpan" : "Tambahkan",
+    ambil: function(){
+      var j = document.getElementById("bkJudul").value.trim();
+      if(!j) return {galat:"Nama berkasnya belum diisi."};
+      return {nilai:{judul:j, stase:document.getElementById("bkStase").value,
+                     rs:document.getElementById("bkRs").value.trim(),
+                     catatan:document.getElementById("bkCatatan").value.trim()}};
+    }
+  });
+}
+
+function pasangBerkas(){
+  Array.prototype.forEach.call(panggung.querySelectorAll("[data-bk-stase]"), function(b){
+    b.addEventListener("click", function(){ ui.berkasStase = b.dataset.bkStase; render(); });
+  });
+
+  Array.prototype.forEach.call(panggung.querySelectorAll("[data-bk-usai]"), function(b){
+    b.addEventListener("click", function(){
+      var m = berkasSelesai();
+      var id = b.dataset.bkUsai;
+      if(m[id]) delete m[id]; else m[id] = true;
+      simpanPribadi();
+      render();
+    });
+  });
+
+  var tb = document.getElementById("bkTambah");
+  if(tb) tb.addEventListener("click", async function(){
+    var n = await formBerkas(null);
+    if(!n) return;
+    daftarBerkas().push({id:idBaru("bk"), judul:n.judul, stase:n.stase, rs:n.rs, catatan:n.catatan});
+    ui.berkasStase = n.stase;
+    simpan();
+    if(!await dorongAtur()) return;
+    render();
+    toast("Berkas ditambahkan.");
+  });
+
+  Array.prototype.forEach.call(panggung.querySelectorAll("[data-bk-ubah]"), function(b){
+    b.addEventListener("click", async function(){
+      var it = daftarBerkas().filter(function(x){ return x.id === b.dataset.bkUbah; })[0];
+      if(!it) return;
+      var n = await formBerkas(it);
+      if(!n) return;
+      it.judul = n.judul; it.stase = n.stase; it.rs = n.rs; it.catatan = n.catatan;
+      ui.berkasStase = n.stase;
+      simpan();
+      if(!await dorongAtur()) return;
+      render();
+      toast("Berkas diperbarui.");
+    });
+  });
+
+  Array.prototype.forEach.call(panggung.querySelectorAll("[data-bk-hapus]"), function(b){
+    b.addEventListener("click", async function(){
+      var it = daftarBerkas().filter(function(x){ return x.id === b.dataset.bkHapus; })[0];
+      if(!it) return;
+      if(!await tanya("Hapus dari checklist?",
+            "\u201C" + it.judul + "\u201D akan hilang untuk semua akun, termasuk centang yang sudah mereka isi.",
+            {ok:"Hapus", bahaya:true})) return;
+      db.berkas = daftarBerkas().filter(function(x){ return x.id !== it.id; });
+      simpan();
+      if(!await dorongAtur()) return;
+      render();
+      toast("Berkas dihapus.");
+    });
+  });
+}
+
 function viewIpk(){
   var d = ipkData();
   var t = totalIpk();
@@ -6034,7 +6348,7 @@ async function dorongAtur(){
   var j = await srv("aturSimpan", {
     teks: db.teks, tema: db.tema, stase: db.stase,
     staseUbah: db.staseUbah, staseGambar: db.staseGambar, ikon: db.ikon || "",
-    agenda: db.agenda || []
+    agenda: db.agenda || [], berkas: db.berkas || []
   });
   if(j.galat){ toast(j.galat); return false; }
   if(j.arsip) pasangArsipServer(j.arsip);
@@ -6763,6 +7077,7 @@ function pasangArsipServer(arsip){
   if(arsip.tema) db.tema = arsip.tema;
   if(typeof arsip.ikon === "string") db.ikon = arsip.ikon;
   if(Array.isArray(arsip.agenda)) db.agenda = arsip.agenda;
+  if(Array.isArray(arsip.berkas)) db.berkas = arsip.berkas;
   terapkanStaseUbah();
   terapkanIkon();
 }

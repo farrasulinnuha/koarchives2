@@ -164,7 +164,31 @@ var DASAR =
   "sesuatu, jangan mengarang; tulis apa adanya. Kalau ada yang menurutmu keliru di " +
   "materi aslinya, perbaiki dan sebutkan alasannya.";
 
+/* OCR memakai kemampuan baca gambar Claude, bukan pustaka pengenal huruf.
+   Untuk tulisan tangan dan istilah medis hasilnya jauh lebih baik, dan
+   tidak ada pustaka 13 MB yang harus ikut diunduh pemakai. */
+var SKEMA_OCR = {
+  type: "object",
+  properties: {
+    teks: { type: "string" },
+    catatan: { type: "string" }
+  },
+  required: ["teks"],
+  additionalProperties: false
+};
+
 var TUGAS = {
+  ocr: {
+    sistem: DASAR + "\n\nSalin SELURUH teks yang terbaca pada gambar atau dokumen " +
+      "yang dilampirkan, apa adanya, tanpa merangkum dan tanpa menambah apa pun. " +
+      "Pertahankan urutan bacanya, dan jaga struktur seperti judul, penomoran, dan " +
+      "butir daftar memakai markdown sederhana. Untuk tabel, tulis ulang sebagai " +
+      "tabel markdown. Kalau ada bagian yang tidak terbaca jelas, tulis [tidak " +
+      "terbaca] di posisinya, jangan ditebak. Isi \"catatan\" hanya bila ada hal " +
+      "yang perlu diketahui pembaca, misalnya tulisan terpotong atau buram; kalau " +
+      "tidak ada, kosongkan.",
+    skema: SKEMA_OCR
+  },
   outline: {
     sistem: DASAR + "\n\nSusun materi yang diberikan menjadi SATU entri bertipe " +
       "\"outline\": definisi, patofisiologi ringkas, pendekatan diagnosis, diagnosis " +
