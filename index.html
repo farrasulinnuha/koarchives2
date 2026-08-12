@@ -954,6 +954,19 @@ body.berlatar .butir{opacity:.25}
   border:1px solid var(--garis);background:#000}
 .lam-video iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .lam-cap{margin:2px 0 0;font-size:13px;font-weight:700;color:var(--redup)}
+.lam-dok{position:relative;width:100%;height:min(72vh,760px);min-height:400px;
+  border-radius:14px;overflow:hidden;border:1px solid var(--garis);background:rgba(var(--kaca),.8)}
+.lam-dok iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.lam-kaki{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;
+  margin:-2px 0 6px;padding:0 2px}
+.lam-gbr{margin:0}
+.lam-gbr img{display:block;width:100%;height:auto;border-radius:14px;border:1px solid var(--garis)}
+.lam-gbr figcaption{margin-top:6px;font-size:13px;font-weight:700;color:var(--redup)}
+.lam-tunggu{display:flex;align-items:center;gap:11px;padding:12px 14px;border-radius:13px;
+  border:1px dashed var(--garis);background:rgba(var(--kaca),.4);font-size:14.5px}
+.lam-gagal{border-color:var(--buruk);color:var(--buruk)}
+.lam-gagal .lam-tanda{background:var(--buruk)}
+@media (max-width:560px){.lam-dok{height:70vh;min-height:320px}}
 .lam-sunting{display:flex;flex-direction:column;gap:7px}
 .lam-sbaris{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:11px;
   border:1px solid var(--garis);background:rgba(var(--kaca),.5);font-size:14px}
@@ -4097,6 +4110,18 @@ function jenisTautan(url){
   return "tautan";
 }
 
+/* Google mengizinkan penyematan hanya lewat bentuk /preview. Tautan /view
+   atau /edit yang ditempel apa adanya akan tampil sebagai bingkai kosong. */
+function drivePratinjau(u){
+  var berkas = u.match(/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]+)/);
+  if(berkas) return "https://drive.google.com/file/d/" + berkas[1] + "/preview";
+  var dok = u.match(/docs\.google\.com\/([a-z]+)\/d\/([A-Za-z0-9_-]+)/);
+  if(dok) return "https://docs.google.com/" + dok[1] + "/d/" + dok[2] + "/preview";
+  var buka = u.match(/drive\.google\.com\/open\?id=([A-Za-z0-9_-]+)/);
+  if(buka) return "https://drive.google.com/file/d/" + buka[1] + "/preview";
+  return null;
+}
+
 function labelTautan(j){
   return {youtube:"Video YouTube", pdf:"PDF", gambar:"Gambar", drive:"Google Drive", tautan:"Tautan"}[j] || "Tautan";
 }
@@ -4107,6 +4132,14 @@ function urlAman(u){
   // celah XSS yang dipicu pembaca lain saat mengeklik lampiran.
   if(!/^https?:\/\//i.test(t)) return null;
   return t;
+}
+
+function ukuranBerkas(b){
+  b = Number(b) || 0;
+  if(!b) return "";
+  if(b < 1024) return " \u00B7 " + b + " B";
+  if(b < 1048576) return " \u00B7 " + Math.round(b / 1024) + " KB";
+  return " \u00B7 " + (Math.round(b / 1048576 * 10) / 10) + " MB";
 }
 
 function lampiranEntri(e){
@@ -4131,11 +4164,25 @@ function bagianLampiran(e){
   var daftar = lampiranEntri(e);
   if(!daftar.length) return "";
   var h = '<section class="kotak kaca"><h2>Lampiran</h2><div class="lam-daftar">';
+
+  function bingkai(src, judul, tautanLuar){
+    var t = '<div class="lam-dok"><iframe src="' + esc(src) + '" title="' + esc(judul || "Dokumen") +
+            '" loading="lazy" referrerpolicy="no-referrer"></iframe></div>';
+    t += '<div class="lam-kaki"><span class="lam-cap">' + esc(judul || "Dokumen") + "</span>";
+    // Sebagian situs menolak disematkan dan bingkainya jadi kosong tanpa
+    // pesan apa pun, jadi jalan keluarnya selalu disediakan.
+    if(tautanLuar) t += '<a class="t kcl" href="' + esc(tautanLuar) +
+      '" target="_blank" rel="noopener noreferrer">Buka di tab baru</a>';
+    t += "</div>";
+    return t;
+  }
+
   daftar.forEach(function(l){
     if(l.jenis === "tautan"){
       var u = urlAman(l.url);
       if(!u) return;
       var j = jenisTautan(u);
+
       if(j === "youtube"){
         h += '<div class="lam-video"><iframe src="https://www.youtube-nocookie.com/embed/' +
              esc(idYoutube(u)) + '" title="' + esc(l.judul || "Video") +
@@ -4144,18 +4191,47 @@ function bagianLampiran(e){
         if(l.judul) h += '<p class="lam-cap">' + esc(l.judul) + "</p>";
         return;
       }
+
+      if(j === "gambar"){
+        h += '<figure class="lam-gbr"><img src="' + esc(u) + '" alt="' + esc(l.judul || "Gambar lampiran") +
+             '" loading="lazy" referrerpolicy="no-referrer">';
+        if(l.judul) h += "<figcaption>" + esc(l.judul) + "</figcaption>";
+        h += "</figure>";
+        return;
+      }
+
+      if(j === "pdf"){ h += bingkai(u, l.judul || "PDF", u); return; }
+
+      var pratinjau = drivePratinjau(u);
+      if(pratinjau){ h += bingkai(pratinjau, l.judul || "Google Drive", u); return; }
+
       h += '<a class="lam-baris" href="' + esc(u) + '" target="_blank" rel="noopener noreferrer">' +
            '<span class="lam-tanda">' + esc(labelTautan(j)) + "</span>" +
            '<span class="lam-nama">' + esc(l.judul || u) + "</span>" +
            '<span class="lam-buka">Buka</span></a>';
       return;
     }
+
+    // Berkas terunggah: isinya ditarik dari server saat gulir sampai ke sini,
+    // supaya membuka entri tidak langsung mengunduh semua PDF sekaligus.
+    var gambar = (l.mime || "").indexOf("image") === 0;
+    var pdf = (l.mime || "").indexOf("pdf") !== -1;
+    if(gambar || pdf){
+      h += '<div class="lam-tunda" data-lam-tunda="' + esc(l.id) + '" data-lam-jenis="' +
+           (gambar ? "gambar" : "pdf") + '">';
+      h += '<div class="lam-tunggu"><span class="lam-tanda">' + (gambar ? "Gambar" : "PDF") + "</span>" +
+           '<span class="lam-nama">' + esc(l.judul || "Berkas") + esc(ukuranBerkas(l.ukuran)) + "</span>" +
+           '<span class="lam-buka">Memuat\u2026</span></div>';
+      h += "</div>";
+      return;
+    }
+
     h += '<button class="lam-baris" type="button" data-lam="' + esc(l.id) + '">' +
-         '<span class="lam-tanda">' + esc((l.mime || "").indexOf("image") === 0 ? "Gambar" : "PDF") + "</span>" +
-         '<span class="lam-nama">' + esc(l.judul || "Berkas") +
-         (l.ukuran ? " \u00B7 " + Math.round(l.ukuran / 1024) + " KB" : "") + "</span>" +
-         '<span class="lam-buka">Buka</span></button>';
+         '<span class="lam-tanda">Berkas</span>' +
+         '<span class="lam-nama">' + esc(l.judul || "Berkas") + esc(ukuranBerkas(l.ukuran)) + "</span>" +
+         '<span class="lam-buka">Unduh</span></button>';
   });
+
   h += "</div></section>";
   return h;
 }
@@ -4165,22 +4241,65 @@ function pasangLampiran(e){
     b.addEventListener("click", async function(){
       var l = lampiranEntri(e).filter(function(x){ return x.id === b.dataset.lam; })[0];
       if(!l) return;
-      var asli = b.querySelector(".lam-buka").textContent;
-      b.querySelector(".lam-buka").textContent = "Memuat\u2026";
+      var cap = b.querySelector(".lam-buka");
+      var asli = cap.textContent;
+      cap.textContent = "Memuat\u2026";
       var durl = await ambilLampiran(l);
-      b.querySelector(".lam-buka").textContent = asli;
+      cap.textContent = asli;
       if(!durl){ toast("Lampirannya tidak bisa diambil."); return; }
-      // Blob URL, bukan data: URL panjang \u2014 Safari menolak data: URL
-      // besar di tab baru.
-      var bin = atob(durl.slice(durl.indexOf(",") + 1));
-      var buf = new Uint8Array(bin.length);
-      for(var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-      var blob = new Blob([buf], {type:l.mime || "application/octet-stream"});
-      var url = URL.createObjectURL(blob);
+      var url = blobDari(durl, l.mime);
       window.open(url, "_blank", "noopener");
       setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
     });
   });
+
+  var tunda = panggung.querySelectorAll("[data-lam-tunda]");
+  if(!tunda.length) return;
+
+  async function muatKotak(kotak){
+    if(kotak.dataset.sudah) return;
+    kotak.dataset.sudah = "1";
+    var l = lampiranEntri(e).filter(function(x){ return x.id === kotak.dataset.lamTunda; })[0];
+    if(!l) return;
+    var durl = await ambilLampiran(l);
+    if(!durl){
+      kotak.innerHTML = '<div class="lam-baris lam-gagal"><span class="lam-tanda">Gagal</span>' +
+        '<span class="lam-nama">' + esc(l.judul || "Berkas") + " tidak bisa diambil.</span></div>";
+      return;
+    }
+    var url = blobDari(durl, l.mime);
+    if(kotak.dataset.lamJenis === "gambar"){
+      kotak.innerHTML = '<figure class="lam-gbr"><img alt="' + esc(l.judul || "Gambar lampiran") + '">' +
+        (l.judul ? "<figcaption>" + esc(l.judul) + "</figcaption>" : "") + "</figure>";
+      kotak.querySelector("img").src = url;
+      return;
+    }
+    kotak.innerHTML = '<div class="lam-dok"><iframe title="' + esc(l.judul || "PDF") + '"></iframe></div>' +
+      '<div class="lam-kaki"><span class="lam-cap">' + esc(l.judul || "PDF") + "</span>" +
+      '<button class="t kcl" type="button" data-lam-penuh="1">Buka di tab baru</button></div>';
+    kotak.querySelector("iframe").src = url;
+    kotak.querySelector("[data-lam-penuh]").addEventListener("click", function(){
+      window.open(url, "_blank", "noopener");
+    });
+  }
+
+  // Sengaja dimuat langsung, bukan menunggu digulir. Pemuatan malas sempat
+  // dicoba, tapi kegagalannya bergejala "lampiran tidak pernah muncul" dan
+  // itu tidak sepadan dengan hemat kuota yang didapat: berkasnya toh
+  // dibatasi 3 MB dan satu entri jarang punya banyak lampiran.
+  // Berurutan, supaya beberapa PDF tidak berebut jalur sekaligus.
+  (async function(){
+    for(var i = 0; i < tunda.length; i++) await muatKotak(tunda[i]);
+  })();
+}
+
+/* data: URL panjang ditolak Safari saat dibuka di tab baru, jadi isinya
+   selalu diubah jadi blob dulu. */
+function blobDari(durl, mime){
+  var bin = atob(durl.slice(durl.indexOf(",") + 1));
+  var buf = new Uint8Array(bin.length);
+  for(var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  return URL.createObjectURL(new Blob([buf], {type:mime || "application/octet-stream"}));
 }
 
 function imporJson(teks){
