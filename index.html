@@ -5097,12 +5097,16 @@ function viewJadwal(){
       // Pengingat titipan orang lain tetap bisa dicentang selesai untuk
       // diri sendiri, tapi tidak boleh disunting atau dihapus.
       var bolehUbah = a.tugasan ? a.punyaku : (!a.bersama || pemilik());
+      // Duplikat terbuka untuk semua, termasuk pengingat titipan orang lain:
+      // salinannya selalu jadi milik pribadi si penyalin, bukan ikut
+      // disebar ulang ke orang yang sama.
+      h += '<div class="ag-aksi">';
+      h += '<button class="t kcl" type="button" data-ag-salin="' + esc(a.id) + '">Duplikat</button>';
       if(bolehUbah){
-        h += '<div class="ag-aksi">';
         h += '<button class="t kcl" type="button" data-ag-ubah="' + esc(a.id) + '">Ubah</button>';
         h += '<button class="t kcl" type="button" data-ag-hapus="' + esc(a.id) + '">Hapus</button>';
-        h += "</div>";
       }
+      h += "</div>";
       h += "</li>";
     });
     h += "</ul></section>";
@@ -5204,6 +5208,20 @@ function pasangJadwal(){
       var n = await formAgenda(awal);
       if(!n) return;
       await tulisAgenda(b.dataset.agUbah, n);
+    });
+  });
+
+  Array.prototype.forEach.call(panggung.querySelectorAll("[data-ag-salin]"), function(b){
+    b.addEventListener("click", async function(){
+      var f = cariAgenda(b.dataset.agSalin);
+      if(!f) return;
+      var n = await formAgenda({
+        judul: f.a.judul, tanggal: f.a.tanggal, jam: f.a.jam || "",
+        jenis: f.a.jenis, catatan: f.a.catatan || "",
+        bersama: false, untuk: []
+      });
+      if(!n) return;
+      await tulisAgenda(null, n);
     });
   });
 
@@ -5583,7 +5601,8 @@ function viewBerkas(){
       h += '<div class="ag-isi"><div class="ag-judul">' + esc(b.judul) + "</div>";
       if(b.catatan) h += '<div class="ag-catatan">' + esc(b.catatan) + "</div>";
       h += "</div>";
-      h += '<div class="ag-aksi"><button class="t kcl" type="button" data-bk-ubah="' + esc(b.id) + '">Ubah</button>';
+      h += '<div class="ag-aksi"><button class="t kcl" type="button" data-bk-salin="' + esc(b.id) + '">Duplikat</button>';
+      h += '<button class="t kcl" type="button" data-bk-ubah="' + esc(b.id) + '">Ubah</button>';
       h += '<button class="t kcl" type="button" data-bk-hapus="' + esc(b.id) + '">Hapus</button></div>';
       h += "</li>";
     });
@@ -5772,6 +5791,22 @@ function pasangBerkas(){
       simpanPribadi();
       render();
       toast("Berkas diperbarui.");
+    });
+  });
+
+  Array.prototype.forEach.call(panggung.querySelectorAll("[data-bk-salin]"), function(b){
+    b.addEventListener("click", async function(){
+      var it = daftarBerkas().filter(function(x){ return x.id === b.dataset.bkSalin; })[0];
+      if(!it) return;
+      // Salinan mulai belum tercentang: berkas yang sama di RS lain tentu
+      // belum tentu sudah diurus juga.
+      var n = await formBerkas({judul:it.judul, stase:it.stase, rs:it.rs, catatan:it.catatan});
+      if(!n) return;
+      daftarBerkas().push({id:idBaru("bk"), judul:n.judul, stase:n.stase, rs:n.rs, catatan:n.catatan});
+      ui.berkasStase = n.stase;
+      simpanPribadi();
+      render();
+      toast("Berkas diduplikat.");
     });
   });
 
