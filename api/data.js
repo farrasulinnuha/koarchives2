@@ -228,7 +228,7 @@ function bersihEntri(e, akun) {
     };
   }) : [];
 
-  var tipe = ["materi", "outline", "kuis", "catatan"].indexOf(e.tipe) !== -1
+  var tipe = ["materi", "outline", "kuis", "catatan", "biko"].indexOf(e.tipe) !== -1
     ? e.tipe : (soal.length ? "kuis" : "materi");
 
   return {

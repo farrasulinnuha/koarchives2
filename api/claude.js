@@ -103,7 +103,7 @@ var SKEMA_ENTRI = {
         type: "object",
         properties: {
           stase: { type: "string" },
-          tipe: { type: "string", enum: ["materi", "outline", "kuis", "catatan"] },
+          tipe: { type: "string", enum: ["materi", "outline", "kuis", "catatan", "biko"] },
           judul: { type: "string" },
           tag: { type: "array", items: { type: "string" } },
           sumber: { type: "string" },

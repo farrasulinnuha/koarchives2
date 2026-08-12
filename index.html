@@ -1541,8 +1541,14 @@ var TEKS_BAWAAN = {
   labelOutline:"Outline",
   labelKuis:"Kuis",
   labelCatatan:"Catatan",
+  labelBiko:"Biko",
   kaki:"Arsip pribadi. Jangan simpan data pasien yang bisa diidentifikasi."
 };
+
+/* Satu sumber daftar tipe entri. Sebelumnya daftar ini disalin di lima
+   tempat (editor, saringan, impor, server, skema Claude) dan gampang
+   ketinggalan saat ada tipe baru. */
+var TIPE_ENTRI = ["materi", "outline", "kuis", "catatan", "biko"];
 
 var PALET = [
   {id:"nadi",      nama:"Nadi",        a1:"#FF5A7E", a2:"#FF8A5B", a3:"#B14AED"},
@@ -2763,7 +2769,7 @@ function viewArsip(){
   h += "</div>";
 
   h += '<div class="saring">';
-  [["semua","Semua"],["materi",labelTipe("materi")],["outline",labelTipe("outline")],["kuis",labelTipe("kuis")],["catatan",labelTipe("catatan")]].forEach(function(t){
+  [["semua","Semua"]].concat(TIPE_ENTRI.map(function(t){ return [t, labelTipe(t)]; })).forEach(function(t){
     h += '<button class="pil" type="button" data-tipe="' + t[0] + '" aria-pressed="' + (ui.tipe === t[0] ? "true" : "false") + '">' + esc(t[1]) + "</button>";
   });
   h += "</div>";
@@ -3240,7 +3246,7 @@ function viewEditor(){
   });
   h += "</select></div>";
   h += '<div class="b"><label for="fTipe">Tipe</label><select id="fTipe">';
-  ["materi","outline","kuis","catatan"].forEach(function(t){
+  TIPE_ENTRI.forEach(function(t){
     h += '<option value="' + t + '"' + (t === e.tipe ? " selected" : "") + ">" + esc(labelTipe(t)) + "</option>";
   });
   h += "</select></div></div>";
@@ -4355,7 +4361,7 @@ function imporJson(teks){
   arr.forEach(function(o){
     if(!o || typeof o !== "object" || !o.judul){ lewat++; return; }
     var soal = Array.isArray(o.soal) ? o.soal.map(normalSoal).filter(Boolean) : [];
-    var tipe = ["materi","outline","kuis","catatan"].indexOf(o.tipe) !== -1 ? o.tipe : (soal.length ? "kuis" : "materi");
+    var tipe = TIPE_ENTRI.indexOf(o.tipe) !== -1 ? o.tipe : (soal.length ? "kuis" : "materi");
     var obj = {
       id: o.id || idBaru("e"),
       stase: sah[o.stase] ? o.stase : "ipd",
@@ -5645,6 +5651,7 @@ function viewAtur(){
   h += tField("labelOutline", "Label tipe: outline", T("labelOutline"));
   h += tField("labelKuis", "Label tipe: kuis", T("labelKuis"));
   h += tField("labelCatatan", "Label tipe: catatan", T("labelCatatan"));
+  h += tField("labelBiko", "Label tipe: biko", T("labelBiko"));
   h += "</div>";
   h += tField("kaki", "Catatan kaki", T("kaki"));
   h += '<div class="kotak-aksi"><button class="t utama" id="simpanTeks" type="button">Simpan teks</button>';
