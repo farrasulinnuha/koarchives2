@@ -993,6 +993,27 @@ input[type=file]{width:100%;padding:10px;border-radius:11px;border:1px dashed va
 .ag-umum input{width:auto;flex:none}
 .dialog-galat{margin:10px 0 0;font-size:13px;font-weight:700;color:var(--buruk)}
 .dialog-galat:empty{display:none}
+.gerbang-lebar{max-width:min(720px,94vw)}
+.dialog-borang textarea{width:100%;padding:11px 13px;border-radius:11px;border:1px solid var(--garis);
+  background:rgba(var(--kaca),.65);color:var(--tinta);font:500 14.5px/1.6 var(--f-teks);resize:vertical}
+.dialog-borang textarea:focus{outline:2px solid var(--a2);outline-offset:1px}
+.ct-tulis{min-height:260px}
+.ct-saring{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px}
+.ct-chip{padding:7px 13px;border-radius:100px;cursor:pointer;border:1px solid var(--garis);
+  background:rgba(var(--kaca),.55);color:var(--tinta);font:700 13px/1 var(--f-teks)}
+.ct-chip b{font-weight:800;opacity:.55;margin-left:3px}
+.ct-chip.nyala{background:var(--a2);color:var(--atas-aksen);border-color:transparent}
+.ct-chip.nyala b{opacity:.8}
+.ct-kepala{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.ct-stase{flex:none;padding:3px 9px;border-radius:100px;background:var(--sw,var(--a2));color:#fff;
+  font-size:10.5px;font-weight:800;letter-spacing:.05em}
+.ct-judul{margin:0;font-family:var(--f-tampil);font-size:19px;font-weight:800;letter-spacing:-.02em}
+.ct-isi{font-size:14.5px}
+.ct-isi>*:first-child{margin-top:0}
+.ct-kaki{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;
+  margin-top:14px;padding-top:12px;border-top:1px solid var(--garis)}
+.ct-waktu{font-size:12.5px;font-weight:600;color:var(--redup)}
+.ct-aksi{display:flex;gap:6px}
 .ag-teman{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px;max-height:170px;overflow:auto}
 .ag-orang{display:inline-flex;align-items:center;gap:7px;padding:7px 11px;border-radius:100px;
   border:1px solid var(--garis);background:rgba(var(--kaca),.6);cursor:pointer;
@@ -1923,7 +1944,7 @@ function dialog(o){
     g.setAttribute("role", "dialog");
     g.setAttribute("aria-modal", "true");
 
-    var h = '<form class="gerbang-kotak kaca" id="dform">';
+    var h = '<form class="gerbang-kotak kaca' + (o.lebar ? " gerbang-lebar" : "") + '" id="dform">';
     h += "<h2>" + esc(o.judul || "Konfirmasi") + "</h2>";
     if(o.pesan) h += '<p class="dialog-pesan">' + esc(o.pesan) + "</p>";
     if(teks){
@@ -2071,6 +2092,7 @@ var IKON = {
   keluar:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg>',
   balik:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
   main:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l13 8-13 8z"/></svg>',
+  catatan:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5z"/><path d="M15 3v5h5M8.5 13h7M8.5 17h4"/></svg>',
   jadwal:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
   ipk:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
   tampilan:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="m3 14 4.5-4.5 3.5 3 3.5-3.5L21 14"/><circle cx="8.5" cy="8.5" r="1.2"/></svg>'
@@ -2288,7 +2310,8 @@ function soalKeTeks(list){
    6. Peran
    ===================================================================== */
 
-var ui = {view:"arsip", stase:"semua", tipe:"semua", cari:"", entriId:null, kuis:null};
+var ui = {view:"arsip", stase:"semua", tipe:"semua", cari:"", entriId:null, kuis:null,
+          catatanStase:null, catatanCari:""};
 var sunting = null;
 
 function sesi(){
@@ -2390,7 +2413,7 @@ function kunciPribadi(){ return KUNCI + "/pribadi/" + (penggunaAkun() || "tamu")
 
 function pribadiKosong(){
   return {latar:null, latarBuram:0, latarGelap:45, tema:null, ipk:null, skor:{}, klarifikasi:[],
-          agenda:[], agendaSelesai:{}};
+          agenda:[], agendaSelesai:{}, catatan:[]};
 }
 
 function muatPribadi(){
@@ -2416,6 +2439,14 @@ function skorSaya(){
   if(!pribadi.skor || typeof pribadi.skor !== "object") pribadi.skor = {};
   return pribadi.skor;
 }
+/* Catatan pribadi ikut ember `pribadi` tiap akun. Ember itu hanya
+   dikembalikan server kepada pemiliknya sendiri, jadi pemilik arsip pun
+   tidak bisa membacanya. Jangan pernah memindahkannya ke `db`. */
+function catatanSaya(){
+  if(!Array.isArray(pribadi.catatan)) pribadi.catatan = [];
+  return pribadi.catatan;
+}
+
 function agendaSaya(){
   if(!Array.isArray(pribadi.agenda)) pribadi.agenda = [];
   return pribadi.agenda;
@@ -2518,6 +2549,7 @@ function navItem(){
   // Jadwal terbuka untuk semua peran: tiap orang punya pengingat sendiri,
   // dan pemilik bisa mengumumkan agenda bersama.
   n.push({v:"jadwal", ik:"jadwal", nm:"Jadwal", lencana:jadwalMendesak()});
+  n.push({v:"catatan", ik:"catatan", nm:"Catatan"});
   n.push({v:"ipk", ik:"ipk", nm:"IPK"});
   if(bisaTulis()) n.push({v:"editor", ik:"tambah", nm:"Tambah", sorot:true});
   if(pemilik()) n.push({v:"tinjauan", ik:"tinjau", nm:"Tinjauan", lencana:antrian().length});
@@ -2668,6 +2700,7 @@ function render(){
   else if(ui.view === "editor") viewEditor();
   else if(ui.view === "tinjauan") viewTinjauan();
   else if(ui.view === "jadwal") viewJadwal();
+  else if(ui.view === "catatan") viewCatatan();
   else if(ui.view === "ipk") viewIpk();
   else if(ui.view === "tampilan") viewTampilan();
   else if(ui.view === "alat") viewAlat();
@@ -5022,6 +5055,186 @@ async function tulisAgenda(id, n){
   }
   render();
   toast(id ? "Pengingat diperbarui." : "Pengingat ditambahkan.");
+}
+
+/* =====================================================================
+   11c. Catatan pribadi tiap akun
+   ===================================================================== */
+
+/* Penampung catatan yang stasenya sudah tidak ada lagi. */
+var CT_LAIN = "\u0000lain";
+
+function catatanTersaring(){
+  var l = catatanSaya().slice();
+  // Penanda ini tidak boleh ikut lewat atribut HTML biasa: parser HTML
+   // mengganti U+0000 dengan U+FFFD, jadi nilainya tidak pernah cocok lagi.
+  if(ui.catatanStase === CT_LAIN){
+    var sah = {};
+    semuaStase().forEach(function(x){ sah[x.id] = true; });
+    l = l.filter(function(c){ return !sah[c.stase]; });
+  }
+  else if(ui.catatanStase) l = l.filter(function(c){ return c.stase === ui.catatanStase; });
+  var q = (ui.catatanCari || "").trim().toLowerCase();
+  if(q) l = l.filter(function(c){
+    return (c.judul || "").toLowerCase().indexOf(q) !== -1 ||
+           (c.isi || "").toLowerCase().indexOf(q) !== -1;
+  });
+  l.sort(function(a, b){ return (b.diubah || b.pada || "") < (a.diubah || a.pada || "") ? -1 : 1; });
+  return l;
+}
+
+function viewCatatan(){
+  var semua = catatanSaya();
+  var l = catatanTersaring();
+
+  var h = bilahAtas();
+  h += '<section class="lembar kaca"><h1 class="judul-besar">Catatan pribadi</h1>';
+  h += '<p style="color:var(--redup);font-size:14px;margin:10px 0 0;max-width:62ch">Buku catatanmu sendiri, bisa ditaruh di stase mana pun. Tersimpan di akunmu dan ikut ke perangkat lain saat kamu masuk \u2014 tidak terlihat oleh kontributor maupun pemilik arsip.</p>';
+  h += '<div class="kotak-aksi"><button class="t utama" id="ctTambah" type="button">+ Catatan</button>';
+  if(semua.length) h += '<input id="ctCari" type="search" placeholder="Cari di catatanmu\u2026" value="' +
+    esc(ui.catatanCari || "") + '" style="flex:1;min-width:170px;padding:9px 13px;border-radius:11px;border:1px solid var(--garis);background:rgba(var(--kaca),.6);font:600 14px/1.4 var(--f-teks);color:var(--tinta)">';
+  h += "</div>";
+
+  if(semua.length){
+    // Hanya stase yang benar-benar dipakai, supaya barisnya tidak jadi
+    // deretan 14 tombol kosong.
+    var jml = {};
+    semua.forEach(function(c){ jml[c.stase] = (jml[c.stase] || 0) + 1; });
+    h += '<div class="ct-saring">';
+    h += '<button class="ct-chip' + (ui.catatanStase ? "" : " nyala") + '" type="button" data-ct-stase="">Semua <b>' + semua.length + "</b></button>";
+    var sahId = {};
+    semuaStase().forEach(function(st){
+      sahId[st.id] = true;
+      if(!jml[st.id]) return;
+      h += '<button class="ct-chip' + (ui.catatanStase === st.id ? " nyala" : "") +
+           '" type="button" data-ct-stase="' + esc(st.id) + '">' + esc(st.nama) + " <b>" + jml[st.id] + "</b></button>";
+    });
+    // Catatan yang stasenya sudah dihapus pemilik tidak boleh kehilangan
+    // jalannya; tanpa penampung ini catatan itu hanya muncul di "Semua".
+    var yatim = semua.filter(function(c){ return !sahId[c.stase]; }).length;
+    if(yatim){
+      h += '<button class="ct-chip' + (ui.catatanStase === CT_LAIN ? " nyala" : "") +
+           '" type="button" data-ct-lain="1">Tanpa stase <b>' + yatim + "</b></button>";
+    }
+    h += "</div>";
+  }
+  h += "</section>";
+
+  if(!l.length){
+    h += '<section class="kotak kaca"><div class="sepi-kotak" style="padding:32px"><b>' +
+         (semua.length ? "Tidak ada yang cocok" : "Belum ada catatan") + "</b><span>" +
+         (semua.length ? "Coba ganti kata kunci atau pilih stase lain."
+                       : "Tulis apa saja \u2014 rangkuman visite, tips penguji, daftar obat yang sering ditanya.") +
+         "</span></div></section>";
+  }
+
+  l.forEach(function(c){
+    var st = cariStase(c.stase);
+    h += '<section class="kotak kaca ct-kartu">';
+    h += '<div class="ct-kepala"><span class="ct-stase" style="--sw:hsl(' + (st.h || 270) + ' 70% 55%)">' +
+         esc(st.kode === "?" ? "\u2013" : st.kode) + "</span>";
+    h += '<h2 class="ct-judul">' + esc(c.judul) + "</h2></div>";
+    h += '<div class="prosa ct-isi">' + md(c.isi || "") + "</div>";
+    h += '<div class="ct-kaki"><span class="ct-waktu">' +
+         (c.diubah && c.diubah !== c.pada ? "diubah " + esc(c.diubah) : esc(c.pada || "")) + "</span>";
+    h += '<span class="ct-aksi"><button class="t kcl" type="button" data-ct-ubah="' + esc(c.id) + '">Ubah</button>';
+    h += '<button class="t kcl" type="button" data-ct-hapus="' + esc(c.id) + '">Hapus</button></span></div>';
+    h += "</section>";
+  });
+
+  panggung.innerHTML = h;
+  pasangCari();
+  pasangCatatan();
+}
+
+async function formCatatan(awal){
+  var c = awal || {judul:"", stase:(semuaStase()[0] || {}).id || "ipd", isi:""};
+  var isi =
+    '<label class="dl">Judul</label>' +
+    '<input id="ctJudul" type="text" maxlength="160" value="' + esc(c.judul) + '" placeholder="mis. Cara baca EKG cepat">' +
+    '<label class="dl">Stase</label><select id="ctStase">' +
+      semuaStase().map(function(st){
+        return '<option value="' + esc(st.id) + '"' + (st.id === c.stase ? " selected" : "") + ">" + esc(st.nama) + "</option>";
+      }).join("") +
+    "</select>" +
+    '<label class="dl">Isi</label>' +
+    '<textarea id="ctIsi" class="ct-tulis" placeholder="Boleh pakai **tebal**, - daftar, dan ## judul.">' + esc(c.isi) + "</textarea>";
+
+  return await dialog({
+    judul: awal ? "Ubah catatan" : "Catatan baru",
+    jenis: "borang", isi: isi, ok: awal ? "Simpan" : "Tambahkan", lebar: true,
+    ambil: function(){
+      var j = document.getElementById("ctJudul").value.trim();
+      if(!j) return {galat:"Judulnya belum diisi."};
+      return {nilai:{judul:j, stase:document.getElementById("ctStase").value,
+                     isi:document.getElementById("ctIsi").value}};
+    }
+  });
+}
+
+function pasangCatatan(){
+  var cari = document.getElementById("ctCari");
+  if(cari){
+    var jeda = null;
+    cari.addEventListener("input", function(){
+      clearTimeout(jeda);
+      jeda = setTimeout(function(){
+        ui.catatanCari = cari.value;
+        render();
+        var f = document.getElementById("ctCari");
+        if(f){ f.focus(); f.setSelectionRange(f.value.length, f.value.length); }
+      }, 220);
+    });
+  }
+
+  Array.prototype.forEach.call(panggung.querySelectorAll("[data-ct-stase]"), function(b){
+    b.addEventListener("click", function(){
+      ui.catatanStase = b.dataset.ctStase || null;
+      render();
+    });
+  });
+
+  Array.prototype.forEach.call(panggung.querySelectorAll("[data-ct-lain]"), function(b){
+    b.addEventListener("click", function(){ ui.catatanStase = CT_LAIN; render(); });
+  });
+
+  var tb = document.getElementById("ctTambah");
+  if(tb) tb.addEventListener("click", async function(){
+    var n = await formCatatan(null);
+    if(!n) return;
+    catatanSaya().push({id:idBaru("ct"), judul:n.judul, stase:n.stase, isi:n.isi,
+                        pada:hariIni(), diubah:hariIni()});
+    simpanPribadi();
+    ui.catatanStase = null; ui.catatanCari = "";
+    render();
+    toast("Catatan tersimpan.");
+  });
+
+  Array.prototype.forEach.call(panggung.querySelectorAll("[data-ct-ubah]"), function(b){
+    b.addEventListener("click", async function(){
+      var c = catatanSaya().filter(function(x){ return x.id === b.dataset.ctUbah; })[0];
+      if(!c) return;
+      var n = await formCatatan(c);
+      if(!n) return;
+      c.judul = n.judul; c.stase = n.stase; c.isi = n.isi; c.diubah = hariIni();
+      simpanPribadi();
+      render();
+      toast("Catatan diperbarui.");
+    });
+  });
+
+  Array.prototype.forEach.call(panggung.querySelectorAll("[data-ct-hapus]"), function(b){
+    b.addEventListener("click", async function(){
+      var c = catatanSaya().filter(function(x){ return x.id === b.dataset.ctHapus; })[0];
+      if(!c) return;
+      if(!await tanya("Hapus catatan?", "\u201C" + c.judul + "\u201D akan dihapus dan tidak bisa dikembalikan.",
+                      {ok:"Hapus", bahaya:true})) return;
+      pribadi.catatan = catatanSaya().filter(function(x){ return x.id !== c.id; });
+      simpanPribadi();
+      render();
+      toast("Catatan dihapus.");
+    });
+  });
 }
 
 function viewIpk(){
