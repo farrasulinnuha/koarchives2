@@ -998,6 +998,19 @@ input[type=file]{width:100%;padding:10px;border-radius:11px;border:1px dashed va
   background:rgba(var(--kaca),.65);color:var(--tinta);font:500 14.5px/1.6 var(--f-teks);resize:vertical}
 .dialog-borang textarea:focus{outline:2px solid var(--a2);outline-offset:1px}
 .ct-tulis{min-height:260px}
+.tab-bar{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 20px;padding-bottom:14px;
+  border-bottom:1px solid var(--garis)}
+.tab-pil{padding:9px 15px;border-radius:100px;cursor:pointer;border:1px solid var(--garis);
+  background:rgba(var(--kaca),.55);color:var(--tinta);font:700 13.5px/1 var(--f-teks);
+  transition:background .16s,color .16s,transform .14s}
+.tab-pil:hover{transform:translateY(-1px)}
+.tab-pil:focus-visible{outline:2px solid var(--a2);outline-offset:2px}
+.tab-pil.nyala{background:linear-gradient(120deg,var(--a1),var(--a3));color:var(--atas-aksen);
+  border-color:transparent;box-shadow:0 5px 15px rgba(25,22,34,.15)}
+.tab-panel[hidden]{display:none}
+.tab-panel>h2:first-child{margin-top:0}
+.pilih-baris{display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:700}
+.pilih-baris input{width:auto;flex:none;margin:0}
 .ct-saring{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px}
 .ct-chip{padding:7px 13px;border-radius:100px;cursor:pointer;border:1px solid var(--garis);
   background:rgba(var(--kaca),.55);color:var(--tinta);font:700 13px/1 var(--f-teks)}
@@ -2317,7 +2330,7 @@ function soalKeTeks(list){
    ===================================================================== */
 
 var ui = {view:"arsip", stase:"semua", tipe:"semua", cari:"", entriId:null, kuis:null,
-          catatanStase:null, catatanCari:""};
+          catatanStase:null, catatanCari:"", tab:0, tabEntri:null};
 var sunting = null;
 
 function sesi(){
@@ -2884,15 +2897,41 @@ function viewDetail(){
 
   h += "</section>";
 
-  if(e.isi) h += '<section class="lembar kaca"><div class="prosa">' + md(e.isi) + "</div>" +
-    (e.sumber ? '<p style="margin:26px 0 0;padding-top:15px;border-top:1px solid var(--garis);font-size:12.5px;color:var(--redup)"><b style="letter-spacing:.07em;text-transform:uppercase;font-size:11px">Sumber</b><br>' + esc(e.sumber) + "</p>" : "") +
-    "</section>";
+  var kakiSumber = e.sumber
+    ? '<p style="margin:26px 0 0;padding-top:15px;border-top:1px solid var(--garis);font-size:12.5px;color:var(--redup)"><b style="letter-spacing:.07em;text-transform:uppercase;font-size:11px">Sumber</b><br>' + esc(e.sumber) + "</p>"
+    : "";
+
+  var pecah = bagianIsi(e);
+  if(pecah){
+    if(ui.tabEntri !== e.id){ ui.tabEntri = e.id; ui.tab = 0; }
+    if(ui.tab >= pecah.bagian.length) ui.tab = 0;
+
+    h += '<section class="lembar kaca">';
+    if(pecah.pengantar) h += '<div class="prosa" style="margin-bottom:20px">' + md(pecah.pengantar) + "</div>";
+    h += '<div class="tab-bar" role="tablist" aria-label="Bagian materi">';
+    pecah.bagian.forEach(function(bg, i){
+      h += '<button class="tab-pil' + (i === ui.tab ? " nyala" : "") + '" type="button" role="tab"' +
+           ' id="tab-' + i + '" aria-selected="' + (i === ui.tab ? "true" : "false") +
+           '" aria-controls="panel-' + i + '" tabindex="' + (i === ui.tab ? "0" : "-1") +
+           '" data-tab="' + i + '">' + esc(bg.judul) + "</button>";
+    });
+    h += "</div>";
+    pecah.bagian.forEach(function(bg, i){
+      h += '<div class="prosa tab-panel" role="tabpanel" id="panel-' + i + '" aria-labelledby="tab-' + i + '"' +
+           (i === ui.tab ? "" : " hidden") + "><h2>" + esc(bg.judul) + "</h2>" + md(bg.isi) + "</div>";
+    });
+    h += kakiSumber + "</section>";
+  }
+  else if(e.isi){
+    h += '<section class="lembar kaca"><div class="prosa">' + md(e.isi) + "</div>" + kakiSumber + "</section>";
+  }
 
   h += bagianLampiran(e);
 
   panggung.innerHTML = h;
   pasangCari();
   pasangLampiran(e);
+  pasangTabIsi();
 
   document.getElementById("balik").addEventListener("click", function(){ ui.view = "arsip"; ui.entriId = null; render(); });
   var m = document.getElementById("mulai");
@@ -3280,6 +3319,10 @@ function viewEditor(){
        '</span>';
   h += '<span id="fBerkasKabar" class="bantu" style="font-weight:700"></span></div>';
 
+  h += '<div class="b"><label class="pilih-baris"><input type="checkbox" id="fTab"' +
+       (e.tab === true ? " checked" : "") + '> Pecah jadi tab per sub-judul</label>' +
+       '<span class="bantu">Tiap baris yang diawali <code>##</code> jadi satu tab di halaman entri \u2014 berguna untuk materi panjang seperti pemeriksaan fisik, supaya tidak perlu dipecah jadi banyak entri.</span></div>';
+
   h += '<div class="b"><label>Lampiran &amp; tautan</label>';
   h += '<div id="lamSunting" class="lam-sunting"></div>';
   h += '<div class="kotak-aksi" style="margin-top:8px">';
@@ -3446,6 +3489,7 @@ function viewEditor(){
       tanggal: document.getElementById("fTgl").value || hariIni(),
       tag: document.getElementById("fTag").value.split(",").map(function(t){ return t.trim(); }).filter(Boolean),
       sumber: document.getElementById("fSumber").value.trim(),
+      tab: document.getElementById("fTab").checked,
       lampiran: lamKerja.map(function(l){
         var salin = {id:l.id, jenis:l.jenis, judul:l.judul, url:l.url || "",
                      mime:l.mime || "", ukuran:l.ukuran || 0};
@@ -4199,6 +4243,35 @@ async function ambilLampiran(l){
   return cacheLampiran[l.id];
 }
 
+/* Memecah isi entri di tiap sub-judul "## " jadi bagian-bagian terpisah.
+   Teks sebelum sub-judul pertama jadi pengantar yang selalu tampil. */
+function pecahBagian(isi){
+  var baris = String(isi || "").split("\n");
+  var pengantar = [];
+  var bagian = [];
+  var kini = null;
+  baris.forEach(function(b){
+    var m = /^##\s+(.+?)\s*$/.exec(b);
+    if(m && !/^###/.test(b)){
+      kini = {judul:m[1], baris:[]};
+      bagian.push(kini);
+      return;
+    }
+    (kini ? kini.baris : pengantar).push(b);
+  });
+  return {
+    pengantar: pengantar.join("\n").trim(),
+    bagian: bagian.map(function(x){ return {judul:x.judul, isi:x.baris.join("\n").trim()}; })
+  };
+}
+
+function bagianIsi(e){
+  // Tab hanya masuk akal kalau memang ada beberapa bagian.
+  if(e.tab !== true) return null;
+  var p = pecahBagian(e.isi);
+  return p.bagian.length >= 2 ? p : null;
+}
+
 function bagianLampiran(e){
   var daftar = lampiranEntri(e);
   if(!daftar.length) return "";
@@ -4273,6 +4346,36 @@ function bagianLampiran(e){
 
   h += "</div></section>";
   return h;
+}
+
+function pasangTabIsi(){
+  var pil = panggung.querySelectorAll("[data-tab]");
+  if(!pil.length) return;
+
+  function ke(i){
+    ui.tab = i;
+    Array.prototype.forEach.call(pil, function(b, n){
+      var aktif = n === i;
+      b.classList.toggle("nyala", aktif);
+      b.setAttribute("aria-selected", aktif ? "true" : "false");
+      b.tabIndex = aktif ? 0 : -1;
+      var panel = document.getElementById("panel-" + n);
+      if(panel) panel.hidden = !aktif;
+    });
+    pil[i].focus();
+  }
+
+  Array.prototype.forEach.call(pil, function(b, n){
+    b.addEventListener("click", function(){ ke(n); });
+    // Panah kiri/kanan sesuai pola tablist yang lazim, supaya bisa
+    // dijelajah tanpa tetikus.
+    b.addEventListener("keydown", function(ev){
+      var lompat = ev.key === "ArrowRight" ? 1 : ev.key === "ArrowLeft" ? -1 : 0;
+      if(!lompat) return;
+      ev.preventDefault();
+      ke((n + lompat + pil.length) % pil.length);
+    });
+  });
 }
 
 function pasangLampiran(e){
@@ -4362,6 +4465,7 @@ function imporJson(teks){
     if(!o || typeof o !== "object" || !o.judul){ lewat++; return; }
     var soal = Array.isArray(o.soal) ? o.soal.map(normalSoal).filter(Boolean) : [];
     var tipe = TIPE_ENTRI.indexOf(o.tipe) !== -1 ? o.tipe : (soal.length ? "kuis" : "materi");
+    var pakaiTab = o.tab === true;
     var obj = {
       id: o.id || idBaru("e"),
       stase: sah[o.stase] ? o.stase : "ipd",
@@ -4372,6 +4476,7 @@ function imporJson(teks){
       tag: Array.isArray(o.tag) ? o.tag.map(String) : [],
       sumber: o.sumber ? String(o.sumber) : "",
       isi: o.isi ? String(o.isi) : "",
+      tab: pakaiTab,
       soal: soal,
       status: pemilik() ? "terbit" : "menunggu",
       penulis: penulisSaya(),

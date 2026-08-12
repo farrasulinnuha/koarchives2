@@ -251,6 +251,7 @@ function bersihEntri(e, akun) {
       };
     }) : [],
     isi: String(e.isi || ""),
+    tab: e.tab === true,
     soal: soal,
     // Status dan penulis ditentukan server, bukan klien. Tanpa ini seorang
     // kontributor bisa mengaku menulis atas nama orang lain, sekaligus
