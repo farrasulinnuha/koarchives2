@@ -2449,7 +2449,7 @@ function kunciPribadi(){ return KUNCI + "/pribadi/" + (penggunaAkun() || "tamu")
 
 function pribadiKosong(){
   return {latar:null, latarBuram:0, latarGelap:45, tema:null, ipk:null, skor:{}, klarifikasi:[],
-          agenda:[], agendaSelesai:{}, catatan:[], berkasSelesai:{}};
+          agenda:[], agendaSelesai:{}, catatan:[], berkas:[], berkasSelesai:{}};
 }
 
 function muatPribadi(){
@@ -5044,7 +5044,9 @@ function viewJadwal(){
   h += '<section class="lembar kaca"><h1 class="judul-besar">Jadwal koas</h1>';
   h += '<p style="color:var(--redup);font-size:14px;margin:10px 0 0;max-width:60ch">Pengingat jaga, ujian, dan tugas. Yang kamu tambahkan milik akunmu sendiri, tapi bisa kamu tugaskan ke teman yang punya akun di sini' +
        (pemilik() ? ", dan sebagai pemilik kamu juga bisa mengumumkan agenda untuk semua orang." : ". Agenda bertanda \u201Cbersama\u201D diumumkan pemilik arsip.") + "</p>";
-  h += '<div class="kotak-aksi"><button class="t utama" id="agTambah" type="button">+ Pengingat</button></div>';
+  h += '<div class="kotak-aksi"><button class="t utama" id="agTambah" type="button">+ Pengingat</button>';
+  h += '<button class="t" id="agPemicu" type="button">Salin pemicu</button>';
+  h += '<button class="t" id="agTempel" type="button">Tempel dari Claude</button></div>';
   h += "</section>";
 
   var judulKel = {lewat:"Terlewat", kini:"Hari ini", dekat:"Minggu ini", nanti:"Nanti", selesai:"Sudah selesai"};
@@ -5177,6 +5179,11 @@ async function formAgenda(awal){
 }
 
 function pasangJadwal(){
+  var ap = document.getElementById("agPemicu");
+  if(ap) ap.addEventListener("click", function(){ salin(promptJadwal(), "Pemicu jadwal disalin."); });
+  var at = document.getElementById("agTempel");
+  if(at) at.addEventListener("click", tempelJadwal);
+
   var tb = document.getElementById("agTambah");
   if(tb) tb.addEventListener("click", async function(){
     var n = await formAgenda(null);
@@ -5470,12 +5477,31 @@ function pasangCatatan(){
    11e. Checklist berkas per stase, dipecah per rumah sakit
    ===================================================================== */
 
-/* Daftarnya milik bersama (disusun pemilik), tapi centangnya milik tiap
-   akun. Jadi satu daftar syarat dipakai bareng, sementara progres tiap
-   orang tetap terpisah. */
+/* Checklist berkas sepenuhnya milik tiap akun: daftarnya maupun
+   centangnya. Sempat dibuat milik bersama, tapi itu salah \u2014 syarat
+   berkas berbeda antar orang, dan daftar satu akun terlihat di akun lain. */
 function daftarBerkas(){
-  if(!Array.isArray(db.berkas)) db.berkas = [];
-  return db.berkas;
+  if(!Array.isArray(pribadi.berkas)) pribadi.berkas = [];
+  return pribadi.berkas;
+}
+
+/* Pindahan sekali jalan dari masa checklist masih milik bersama. Hanya
+   untuk pemilik, yang dulu menyusunnya; akun lain tidak boleh ikut
+   mewarisi daftar orang lain. */
+function pindahBerkasLama(){
+  if(!pemilik()) return;
+  if(!Array.isArray(db.berkas) || !db.berkas.length) return;
+
+  // Menyalin hanya sekali, supaya daftar pribadi yang sudah disunting tidak
+  // ketimpa; tapi mengosongkan salinan bersamanya SELALU, karena selama
+  // kunci itu masih terisi, akun lain tetap menerimanya dari server.
+  if(!daftarBerkas().length){
+    pribadi.berkas = db.berkas.map(function(b){ return Object.assign({}, b); });
+    simpanPribadi();
+  }
+  db.berkas = [];
+  simpan();
+  if(SERVER.ada) dorongAtur();
 }
 
 function berkasStase(){
@@ -5497,10 +5523,10 @@ function viewBerkas(){
 
   var h = bilahAtas();
   h += '<section class="lembar kaca"><h1 class="judul-besar">Checklist berkas</h1>';
-  h += '<p style="color:var(--redup);font-size:14px;margin:10px 0 0;max-width:62ch">Syarat berkas tiap stase, dipisah per rumah sakit. Daftarnya disusun pemilik supaya sama untuk semua orang, tapi centangnya milik akunmu sendiri \u2014 tidak ada yang bisa melihat progresmu.</p>';
-  if(pemilik()){
-    h += '<div class="kotak-aksi"><button class="t utama" id="bkTambah" type="button">+ Berkas</button></div>';
-  }
+  h += '<p style="color:var(--redup);font-size:14px;margin:10px 0 0;max-width:62ch">Syarat berkas tiap stase, dipisah per rumah sakit. Seluruhnya milik akunmu sendiri \u2014 daftar maupun centangnya tidak terlihat oleh siapa pun, termasuk pemilik arsip.</p>';
+  h += '<div class="kotak-aksi"><button class="t utama" id="bkTambah" type="button">+ Berkas</button>';
+  h += '<button class="t" id="bkPemicu" type="button">Salin pemicu</button>';
+  h += '<button class="t" id="bkTempel" type="button">Tempel dari Claude</button></div>';
 
   if(stasePakai.length){
     h += '<div class="ct-saring">';
@@ -5518,8 +5544,7 @@ function viewBerkas(){
 
   if(!semua.length){
     h += '<section class="kotak kaca"><div class="sepi-kotak" style="padding:32px"><b>Belum ada checklist</b><span>' +
-         (pemilik() ? "Tambahkan syarat berkas pertama, misalnya logbook atau laporan kasus."
-                    : "Pemilik arsip belum menyusun daftar syarat berkas.") + "</span></div></section>";
+         "Tambahkan syarat berkas pertama, misalnya logbook atau laporan kasus. Atau salin pemicunya, minta Claude menyusunkan, lalu tempel hasilnya." + "</span></div></section>";
     panggung.innerHTML = h;
     pasangCari();
     pasangBerkas();
@@ -5555,10 +5580,8 @@ function viewBerkas(){
       h += '<div class="ag-isi"><div class="ag-judul">' + esc(b.judul) + "</div>";
       if(b.catatan) h += '<div class="ag-catatan">' + esc(b.catatan) + "</div>";
       h += "</div>";
-      if(pemilik()){
-        h += '<div class="ag-aksi"><button class="t kcl" type="button" data-bk-ubah="' + esc(b.id) + '">Ubah</button>';
-        h += '<button class="t kcl" type="button" data-bk-hapus="' + esc(b.id) + '">Hapus</button></div>';
-      }
+      h += '<div class="ag-aksi"><button class="t kcl" type="button" data-bk-ubah="' + esc(b.id) + '">Ubah</button>';
+      h += '<button class="t kcl" type="button" data-bk-hapus="' + esc(b.id) + '">Hapus</button></div>';
       h += "</li>";
     });
     h += "</ul></section>";
@@ -5604,7 +5627,112 @@ async function formBerkas(awal){
   });
 }
 
+function promptBerkas(){
+  return "Kamu membantu mahasiswa koas menyusun checklist syarat berkas.\n\n" +
+    "Dari daftar syarat yang saya tempel di bawah, keluarkan SATU blok kode JSON " +
+    "berisi larik objek. Tiap objek:\n" +
+    '  "judul"   : nama berkasnya, singkat (mis. "Logbook tindakan")\n' +
+    '  "stase"   : salah satu dari ' + semuaStase().map(function(x){ return '"' + x.id + '"'; }).join(", ") + "\n" +
+    '  "rs"      : nama rumah sakit, tulis persis sama untuk berkas di RS yang sama\n' +
+    '  "catatan" : syarat tambahan yang penting (jumlah minimal, tanda tangan siapa), boleh ""\n\n' +
+    "Pecah syarat yang menggabungkan beberapa hal jadi baris sendiri-sendiri. " +
+    "Jangan menambah syarat yang tidak saya sebutkan. Balas hanya blok JSON-nya.\n\n" +
+    "Daftar syaratnya:\n";
+}
+
+function promptJadwal(){
+  return "Kamu membantu mahasiswa koas menyusun pengingat kegiatan.\n\n" +
+    "Dari jadwal yang saya tempel di bawah, keluarkan SATU blok kode JSON berisi " +
+    "larik objek. Tiap objek:\n" +
+    '  "judul"   : nama kegiatan, singkat\n' +
+    '  "tanggal" : format YYYY-MM-DD. Hari ini ' + hariIni() + ", pakai itu untuk menghitung " +
+    "tanggal yang ditulis relatif seperti \"besok\" atau \"Senin depan\"\n" +
+    '  "jam"     : format HH:MM, atau "" kalau tidak disebut\n' +
+    '  "jenis"   : salah satu dari "jaga", "ujian", "tugas", "acara"\n' +
+    '  "catatan" : hal yang perlu disiapkan, boleh ""\n\n' +
+    "Satu objek untuk satu kejadian. Kalau ada kegiatan berulang, tulis tiap " +
+    "tanggalnya sendiri-sendiri. Balas hanya blok JSON-nya.\n\n" +
+    "Jadwalnya:\n";
+}
+
+/* Kedua penempel di bawah menulis ke ember pribadi, jadi tidak lewat
+   imporJson() yang khusus entri arsip. */
+function bacaJsonTempel(teks){
+  var t = String(teks || "").trim();
+  if(!t) return {galat:"Kotaknya masih kosong."};
+  var pagar = t.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if(pagar) t = pagar[1].trim();
+  var data;
+  try{ data = JSON.parse(t); }
+  catch(err){ return {galat:"JSON tidak terbaca: " + err.message}; }
+  var arr = Array.isArray(data) ? data : [data];
+  return {arr:arr};
+}
+
+async function tempelBerkas(){
+  var teks = await mintaTeks("Tempel checklist dari Claude", "JSON hasil Claude",
+    {banyakBaris:true, ok:"Masukkan",
+     placeholder:'[{"judul":"Logbook tindakan","stase":"ipd","rs":"RSUP Sardjito","catatan":"min. 10 tindakan"}]'});
+  if(teks === null) return;
+  var b = bacaJsonTempel(teks);
+  if(b.galat) return beritahu("Gagal membaca", b.galat);
+
+  var sah = {};
+  semuaStase().forEach(function(x){ sah[x.id] = true; });
+  var masuk = 0, lewat = 0;
+  b.arr.forEach(function(o){
+    if(!o || !o.judul){ lewat++; return; }
+    daftarBerkas().push({
+      id: idBaru("bk"),
+      judul: String(o.judul).slice(0, 160),
+      stase: sah[o.stase] ? o.stase : (semuaStase()[0] || {}).id,
+      rs: o.rs ? String(o.rs).slice(0, 120) : "",
+      catatan: o.catatan ? String(o.catatan).slice(0, 240) : ""
+    });
+    masuk++;
+  });
+  if(!masuk) return beritahu("Tidak ada yang masuk", "Setiap butir butuh \u201Cjudul\u201D.");
+  simpanPribadi();
+  render();
+  toast(masuk + " berkas ditambahkan" + (lewat ? ", " + lewat + " dilewati" : "") + ".");
+}
+
+async function tempelJadwal(){
+  var teks = await mintaTeks("Tempel jadwal dari Claude", "JSON hasil Claude",
+    {banyakBaris:true, ok:"Masukkan",
+     placeholder:'[{"judul":"Jaga malam IGD","tanggal":"2026-08-20","jam":"19:00","jenis":"jaga"}]'});
+  if(teks === null) return;
+  var b = bacaJsonTempel(teks);
+  if(b.galat) return beritahu("Gagal membaca", b.galat);
+
+  var jenisSah = {};
+  JENIS_AGENDA.forEach(function(j){ jenisSah[j.id] = true; });
+  var masuk = 0, lewat = 0;
+  b.arr.forEach(function(o){
+    if(!o || !o.judul || !/^\d{4}-\d{2}-\d{2}$/.test(String(o.tanggal || ""))){ lewat++; return; }
+    agendaSaya().push({
+      id: idBaru("ag"),
+      judul: String(o.judul).slice(0, 160),
+      tanggal: String(o.tanggal),
+      jam: /^\d{2}:\d{2}$/.test(String(o.jam || "")) ? String(o.jam) : "",
+      jenis: jenisSah[o.jenis] ? o.jenis : "acara",
+      catatan: o.catatan ? String(o.catatan).slice(0, 200) : "",
+      selesai: false
+    });
+    masuk++;
+  });
+  if(!masuk) return beritahu("Tidak ada yang masuk", "Setiap butir butuh \u201Cjudul\u201D dan \u201Ctanggal\u201D format YYYY-MM-DD.");
+  simpanPribadi();
+  render();
+  toast(masuk + " pengingat ditambahkan" + (lewat ? ", " + lewat + " dilewati" : "") + ".");
+}
+
 function pasangBerkas(){
+  var bp = document.getElementById("bkPemicu");
+  if(bp) bp.addEventListener("click", function(){ salin(promptBerkas(), "Pemicu checklist disalin."); });
+  var bt = document.getElementById("bkTempel");
+  if(bt) bt.addEventListener("click", tempelBerkas);
+
   Array.prototype.forEach.call(panggung.querySelectorAll("[data-bk-stase]"), function(b){
     b.addEventListener("click", function(){ ui.berkasStase = b.dataset.bkStase; render(); });
   });
@@ -5625,8 +5753,7 @@ function pasangBerkas(){
     if(!n) return;
     daftarBerkas().push({id:idBaru("bk"), judul:n.judul, stase:n.stase, rs:n.rs, catatan:n.catatan});
     ui.berkasStase = n.stase;
-    simpan();
-    if(!await dorongAtur()) return;
+    simpanPribadi();
     render();
     toast("Berkas ditambahkan.");
   });
@@ -5639,8 +5766,7 @@ function pasangBerkas(){
       if(!n) return;
       it.judul = n.judul; it.stase = n.stase; it.rs = n.rs; it.catatan = n.catatan;
       ui.berkasStase = n.stase;
-      simpan();
-      if(!await dorongAtur()) return;
+      simpanPribadi();
       render();
       toast("Berkas diperbarui.");
     });
@@ -5653,9 +5779,9 @@ function pasangBerkas(){
       if(!await tanya("Hapus dari checklist?",
             "\u201C" + it.judul + "\u201D akan hilang untuk semua akun, termasuk centang yang sudah mereka isi.",
             {ok:"Hapus", bahaya:true})) return;
-      db.berkas = daftarBerkas().filter(function(x){ return x.id !== it.id; });
-      simpan();
-      if(!await dorongAtur()) return;
+      pribadi.berkas = daftarBerkas().filter(function(x){ return x.id !== it.id; });
+      delete berkasSelesai()[it.id];
+      simpanPribadi();
       render();
       toast("Berkas dihapus.");
     });
@@ -7239,6 +7365,7 @@ function adaPublik(){
     pasangArsipServer(awal.arsip);
     pribadi = (awal.pribadi && typeof awal.pribadi === "object") ? awal.pribadi : pribadiKosong();
     pasangTugasan(awal.tugasan);
+    pindahBerkasLama();
     muatPribadi.terpakai = true;
     terapkanTema();
 
@@ -7257,6 +7384,7 @@ function adaPublik(){
   }
 
   if(!TERKUNCI){
+    pindahBerkasLama();
     simpan();
     render();
     return;
