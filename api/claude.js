@@ -115,6 +115,23 @@ function hariIni() {
 }
 
 /* Kuota harian per akun. Tanpa KV, tidak dibatasi. */
+/* Sumber kebenaran akun adalah sesi di penyimpanan, sama seperti
+   /api/data. AKUN_VERIFIKASI dulu dipakai di sini, tapi itu peninggalan
+   mode bundel luring: nilainya harus ditempel manual tiap menambah akun,
+   dan pembuatnya butuh sandi polos yang tidak ada lagi di mode server. */
+async function akunDariToken(token) {
+  if (!token || typeof token !== "string" || token.length !== 64) return null;
+  var pengguna = await redis(["GET", "sesi:" + token]);
+  if (!pengguna) return null;
+  var mentah = await redis(["GET", "akun:" + pengguna]);
+  if (!mentah) return null;
+  var a;
+  try { a = JSON.parse(mentah); } catch (e) { return null; }
+  if (!a || a.aktif === false) return null;
+  if (a.exp && a.exp < new Date().toISOString().slice(0, 10)) return null;
+  return a;
+}
+
 async function ambilKuota(akun) {
   if (!URL_KV || !TOKEN_KV) return { ok: true, tanpaKuota: true };
   var kunci = "ai:" + akun + ":" + hariIni();
@@ -265,20 +282,28 @@ module.exports = async function handler(req, res) {
   }
 
   var akunSah = daftarAkun();
-  if (!Object.keys(akunSah).length) {
-    return res.status(200).json({ mati: true, catatan: "AKUN_VERIFIKASI belum diatur." });
+  var adaSesi = !!(URL_KV && TOKEN_KV);
+  if (!adaSesi && !Object.keys(akunSah).length) {
+    return res.status(200).json({
+      mati: true,
+      catatan: "Penyimpanan (KV_REST_API_URL) belum diatur, dan AKUN_VERIFIKASI juga kosong."
+    });
   }
 
   var b = req.body || {};
   if (typeof b === "string") { try { b = JSON.parse(b); } catch (e) { b = {}; } }
 
+  var token = String(b.token || "").slice(0, 80);
   var akun = String(b.akun || "").slice(0, 64).toLowerCase();
   var verifikasi = String(b.verifikasi || "").slice(0, 80);
   var tugas = String(b.tugas || "").slice(0, 20);
   var materi = String(b.materi || "");
 
-  if (!akun || !verifikasi || !TUGAS[tugas]) {
+  if (!TUGAS[tugas]) {
     return res.status(400).json({ galat: "Permintaan tidak lengkap." });
+  }
+  if (!token && (!akun || !verifikasi)) {
+    return res.status(401).json({ galat: "Masuk dulu sebelum memakai AI." });
   }
   var adaLampiran = Array.isArray(b.lampiran) && b.lampiran.length > 0;
   if (!materi.trim() && !adaLampiran) {
@@ -335,12 +360,31 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  var info = normalAkun(akunSah[akun]);
-  if (!info || !samaAman(verifikasi, info.h)) {
-    return res.status(401).json({ galat: "Akun tidak dikenali." });
+  /* Jalur utama: token sesi. Jalur AKUN_VERIFIKASI dipertahankan supaya
+     pemasangan lama tanpa penyimpanan tetap jalan, tapi tidak lagi wajib. */
+  var bolehAi = false;
+  if (token && adaSesi) {
+    var akunSesi = null;
+    try { akunSesi = await akunDariToken(token); }
+    catch (e) { return res.status(502).json({ galat: "Penyimpanan tidak bisa dihubungi." }); }
+    if (!akunSesi) {
+      return res.status(401).json({ galat: "Sesi tidak berlaku, masuk lagi." });
+    }
+    akun = akunSesi.pengguna;
+    bolehAi = akunSesi.ai === true;
+  } else {
+    var info = normalAkun(akunSah[akun]);
+    if (!info || !samaAman(verifikasi, info.h)) {
+      return res.status(401).json({ galat: "Akun tidak dikenali." });
+    }
+    bolehAi = info.ai;
   }
-  if (!info.ai) {
-    return res.status(403).json({ galat: "Akun ini tidak diberi izin memakai " + NAMA_AI + "." });
+
+  if (!bolehAi) {
+    return res.status(403).json({
+      galat: "Akun ini belum diberi izin memakai " + NAMA_AI +
+        ". Pemilik bisa menyalakannya lewat menu Atur \u2192 Akun."
+    });
   }
 
   try {

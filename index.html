@@ -3871,10 +3871,11 @@ function viewAlat(){
       if(siap){
         el.innerHTML = "Tersambung. Hasilnya langsung masuk ke arsip setelah kamu periksa.";
       } else {
-        el.innerHTML = "Belum tersambung ke Claude \u2014 pasang <code>api/claude.js</code> " +
-          "beserta <b>ANTHROPIC_API_KEY</b> di Vercel, atau pakai cara manual di bawah.";
+        el.innerHTML = "Belum tersambung \u2014 pasang <code>api/claude.js</code> beserta " +
+          "<b>ANTHROPIC_API_KEY</b> atau <b>GEMINI_API_KEY</b> di Vercel, " +
+          "atau pakai cara manual di bawah.";
         el.style.color = "var(--tunggu)";
-        ["susunOutline","susunKuis"].forEach(function(id){
+        ["susunOutline","susunKuis","jalanOcr"].forEach(function(id){
           var b = document.getElementById(id);
           if(b) b.disabled = true;
         });
@@ -7286,7 +7287,16 @@ function dorongPribadi(){
 var API_CLAUDE = "/api/claude";
 var claudeSiap = null;
 
+/* Di mode server cukup token sesinya; server yang menentukan akun mana
+   dan boleh-tidaknya memakai AI. Jalur sidik sandi hanya tersisa untuk
+   pemasangan bundel luring yang tidak punya sesi server. */
 async function bekalAkun(){
+  var tok = SERVER.token;
+  if(!tok){
+    try{ tok = localStorage.getItem(KUNCI + "/token") || null; }catch(e){}
+  }
+  if(tok) return {token:tok};
+
   var masuk = null;
   try{ masuk = JSON.parse(localStorage.getItem(KUNCI + "/masuk") || "null"); }catch(e){}
   if(!masuk || !masuk.u) return null;
@@ -7308,7 +7318,8 @@ async function mintaClaude(tugas, materi, lampiran){
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
-        akun:bekal.akun, verifikasi:bekal.verifikasi, tugas:tugas, materi:materi,
+        token:bekal.token, akun:bekal.akun, verifikasi:bekal.verifikasi,
+        tugas:tugas, materi:materi,
         lampiran: (lampiran || []).map(function(l){
           return {jenis:l.jenisKirim, mime:l.mime, data:l.data};
         })
@@ -7330,7 +7341,10 @@ async function mintaClaude(tugas, materi, lampiran){
    yang pasti gagal tidak usah ditampilkan. */
 async function cekClaude(){
   if(claudeSiap !== null) return claudeSiap;
-  if(!TERKUNCI){ claudeSiap = false; return false; }
+  // Dulu dianggap mati kalau situsnya tidak dalam mode bundel terkunci.
+  // Itu keliru sejak akun pindah ke server: justru pemasangan server yang
+  // paling mungkin punya endpointnya. Sekarang endpointnya yang ditanya.
+  if(!TERKUNCI && !SERVER.ada){ claudeSiap = false; return false; }
   try{
     var r = await fetch(API_CLAUDE, {
       method:"POST",
