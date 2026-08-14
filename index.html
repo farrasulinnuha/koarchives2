@@ -4320,6 +4320,10 @@ function viewAlat(){
     h += '<div class="b"><label for="bahanClaude">Materi atau latihan soal</label>';
     h += '<textarea id="bahanClaude" placeholder="Tempel catatan kuliah, ringkasan buku, atau latihan soal apa adanya di sini."></textarea>';
     h += '<span class="bantu">Batas sekali kirim sekitar 60 ribu karakter. Kalau materinya lebih panjang, potong jadi beberapa bagian.</span></div>';
+    h += '<div class="b"><label for="tautanClaude">Atau ambil dari tautan</label>';
+    h += '<input id="tautanClaude" type="url" placeholder="https://\u2026 alamat artikel, pedoman, atau PDF">';
+    h += '<span class="bantu">Servernya yang membuka tautan itu lalu menyerahkan teksnya ke AI \u2014 modelnya sendiri tidak bisa menjelajah web. Halaman yang isinya dimuat lewat skrip atau terkunci berlangganan biasanya tidak kebaca. Video tidak bisa diproses; pasang saja sebagai lampiran tautan di entrinya.</span></div>';
+
     h += '<div class="b"><label for="berkasClaude">Atau ambil dari berkas</label>';
     h += '<input type="file" id="berkasClaude" multiple accept=".pptx,.docx,.pdf,.txt,.md,image/*">';
     h += '<span class="bantu">PowerPoint dan Word dibaca jadi teks langsung di browser ini. PDF (maks 3 MB) dan foto slide dikirim ke AI untuk dibaca sendiri \u2014 batas itu datang dari Vercel, bukan dari Claude. Video tidak bisa diproses; kalau cuma mau disimpan dan ditonton, pasang sebagai lampiran tautan di entrinya.</span>';
@@ -4509,17 +4513,22 @@ function viewAlat(){
 
   function jalankanClaude(tugas, tombol){
     var bahan = document.getElementById("bahanClaude").value;
+    var tautan = (document.getElementById("tautanClaude") || {}).value || "";
     var kabar = document.getElementById("claudeKabar");
-    if(!bahan.trim() && !lampiranClaude.length){ toast("Tempel materinya dulu, atau unggah berkas."); return; }
+    if(!bahan.trim() && !lampiranClaude.length && !tautan.trim()){
+      toast("Tempel materinya dulu, unggah berkas, atau isi tautannya."); return;
+    }
 
     var semua = ["susunOutline","susunKuis","jalanOcr"].map(function(id){ return document.getElementById(id); });
     semua.forEach(function(b){ if(b) b.disabled = true; });
     var labelAsli = tombol.textContent;
     tombol.textContent = "Menyusun\u2026";
-    kabar.textContent = "Ini bisa sampai satu menit.";
+    kabar.textContent = tautan.trim()
+      ? "Membuka tautannya dulu, lalu menyusun. Ini bisa sampai satu menit."
+      : "Ini bisa sampai satu menit.";
     kabar.style.color = "var(--redup)";
 
-    mintaClaude(tugas, bahan, lampiranClaude).then(async function(r){
+    mintaClaude(tugas, bahan, lampiranClaude, tautan).then(async function(r){
       semua.forEach(function(b){ if(b) b.disabled = false; });
       tombol.textContent = labelAsli;
 
@@ -4538,7 +4547,11 @@ function viewAlat(){
 
       // Stase pilihan pengguna menang atas tebakan Claude.
       var stasePilih = document.getElementById("staseClaude").value;
-      entri.forEach(function(e){ e.stase = stasePilih; });
+      entri.forEach(function(e){
+        e.stase = stasePilih;
+        // Tautan asalnya dicatat, supaya nanti masih bisa ditelusuri balik.
+        if(r.dariTautan && !e.sumber) e.sumber = r.dariTautan;
+      });
 
       var hasil = imporJson(JSON.stringify(entri));
       if(!hasil.ok){
@@ -4553,6 +4566,8 @@ function viewAlat(){
         return;
       }
       document.getElementById("bahanClaude").value = "";
+      var elTautan = document.getElementById("tautanClaude");
+      if(elTautan) elTautan.value = "";
       lampiranClaude = [];
       gambarLampiran();
       toast(hasil.pesan + " Periksa dulu sebelum dipakai.");
@@ -8109,7 +8124,7 @@ async function bekalAkun(){
   }catch(e){ return null; }
 }
 
-async function mintaClaude(tugas, materi, lampiran){
+async function mintaClaude(tugas, materi, lampiran, tautan){
   var bekal = await bekalAkun();
   if(!bekal) return {ok:false, pesan:"Perlu masuk dengan akunmu dulu."};
 
@@ -8120,7 +8135,7 @@ async function mintaClaude(tugas, materi, lampiran){
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
         token:bekal.token, akun:bekal.akun, verifikasi:bekal.verifikasi,
-        tugas:tugas, materi:materi,
+        tugas:tugas, materi:materi, tautan:tautan || "",
         lampiran: (lampiran || []).map(function(l){
           return {jenis:l.jenisKirim, mime:l.mime, data:l.data};
         })
@@ -8135,7 +8150,7 @@ async function mintaClaude(tugas, materi, lampiran){
   if(j && j.mati) return {ok:false, mati:true};
   if(j && j.galat) return {ok:false, pesan:j.galat};
   if(!r.ok) return {ok:false, pesan:"Server menjawab " + r.status + "."};
-  return {ok:true, hasil:j.hasil, pakai:j.pakai, batas:j.batas, token:j.token};
+  return {ok:true, hasil:j.hasil, pakai:j.pakai, batas:j.batas, token:j.token, dariTautan:j.dariTautan};
 }
 
 /* Sekali per muat halaman: cek endpointnya ada atau tidak, supaya tombol

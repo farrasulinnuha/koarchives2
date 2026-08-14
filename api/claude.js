@@ -283,6 +283,103 @@ function bersihDalam(nilai) {
   return nilai;
 }
 
+/* ---- Mengambil isi tautan ----
+   Model tidak bisa membuka tautan sendiri, jadi servernya yang mengambil
+   lalu menyerahkan teksnya. Karena permintaan berangkat dari server,
+   alamat internal harus ditutup: tanpa itu endpoint ini jadi jalan untuk
+   mengintip jaringan dalam (SSRF). */
+var TUAN_TERLARANG = /^(?:localhost|127\.|0\.|10\.|169\.254\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|\[?::1\]?|.*\.local|.*\.internal)$/i;
+
+function urlAman(mentah) {
+  var u;
+  try { u = new URL(String(mentah || "").trim()); }
+  catch (e) { return { galat: "Alamatnya tidak terbaca." }; }
+  if (u.protocol !== "http:" && u.protocol !== "https:") {
+    return { galat: "Hanya alamat http:// atau https:// yang bisa diambil." };
+  }
+  var tuan = u.hostname.replace(/^\[|\]$/g, "");
+  if (TUAN_TERLARANG.test(tuan) || TUAN_TERLARANG.test(tuan + ".")) {
+    return { galat: "Alamat itu mengarah ke jaringan internal, tidak diambil." };
+  }
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(tuan)) {
+    var o = tuan.split(".").map(Number);
+    if (o[0] === 10 || o[0] === 127 || o[0] === 0 ||
+        (o[0] === 172 && o[1] >= 16 && o[1] <= 31) ||
+        (o[0] === 192 && o[1] === 168) ||
+        (o[0] === 169 && o[1] === 254)) {
+      return { galat: "Alamat itu mengarah ke jaringan internal, tidak diambil." };
+    }
+  }
+  return { url: u.toString() };
+}
+
+function tagKeTeks(html) {
+  var t = String(html || "");
+  // Buang yang tidak pernah jadi bacaan, termasuk isinya.
+  t = t.replace(/<(script|style|noscript|svg|nav|footer|header|form|aside)[\s\S]*?<\/\1>/gi, " ");
+  t = t.replace(/<!--[\s\S]*?-->/g, " ");
+  // Batas blok dijadikan baris baru supaya daftar dan paragraf tidak menyatu.
+  t = t.replace(/<\/(p|div|li|tr|h[1-6]|blockquote|section|article)>/gi, "\n");
+  t = t.replace(/<br\s*\/?>/gi, "\n");
+  t = t.replace(/<li[^>]*>/gi, "- ");
+  t = t.replace(/<[^>]+>/g, " ");
+  t = t.replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<")
+       .replace(/&gt;/gi, ">").replace(/&quot;/gi, '"').replace(/&#39;/gi, "'");
+  t = t.replace(/[ \t]+/g, " ").replace(/\n[ \t]+/g, "\n").replace(/\n{3,}/g, "\n\n");
+  return t.trim();
+}
+
+async function ambilTautan(mentah) {
+  var cek = urlAman(mentah);
+  if (cek.galat) return cek;
+  if (/youtube\.com|youtu\.be|vimeo\.com|tiktok\.com|instagram\.com/i.test(cek.url)) {
+    return { galat: "Isi video tidak bisa dibaca dari tautannya. Pasang saja sebagai lampiran tautan di entrinya, atau unggah slide/transkripnya." };
+  }
+
+  var r;
+  try {
+    r = await fetch(cek.url, {
+      redirect: "follow",
+      headers: {
+        // Sebagian situs menolak permintaan tanpa identitas peramban.
+        "User-Agent": "Mozilla/5.0 (compatible; ArsipKoas/1.0)",
+        "Accept": "text/html,application/pdf,text/plain;q=0.9"
+      }
+    });
+  } catch (e) {
+    return { galat: "Alamatnya tidak bisa dihubungi: " + String(e.message || e) };
+  }
+  if (!r.ok) return { galat: "Situsnya menjawab " + r.status + "." };
+
+  // Pengalihan bisa mendarat di alamat internal, jadi diperiksa lagi.
+  var akhir = urlAman(r.url || cek.url);
+  if (akhir.galat) return akhir;
+
+  var jenis = (r.headers.get("content-type") || "").toLowerCase();
+  if (jenis.indexOf("application/pdf") !== -1) {
+    var buf = await r.arrayBuffer();
+    if (buf.byteLength > 3000000) {
+      return { galat: "PDF di tautan itu lebih dari 3 MB. Unduh lalu unggah per bab." };
+    }
+    return { pdf: Buffer.from(buf).toString("base64"), sumber: akhir.url };
+  }
+  if (jenis && jenis.indexOf("text/") === -1 && jenis.indexOf("xml") === -1) {
+    return { galat: "Jenis berkas di tautan itu tidak bisa dibaca (" + jenis.split(";")[0] + ")." };
+  }
+
+  var mentahTeks = await r.text();
+  var judul = (mentahTeks.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || "";
+  var teks = tagKeTeks(mentahTeks);
+  if (teks.length < 200) {
+    return { galat: "Halaman itu hampir tidak berisi teks yang bisa dibaca. Kemungkinan isinya dimuat lewat skrip atau terkunci berlangganan." };
+  }
+  return {
+    teks: "SUMBER: " + akhir.url + (judul ? "\nJUDUL HALAMAN: " + tagKeTeks(judul) : "") +
+          "\n\n" + teks.slice(0, MAKS_MASUKAN),
+    sumber: akhir.url
+  };
+}
+
 var SKEMA_RAPI = {
   type: "object",
   properties: { isi: { type: "string" }, catatan: { type: "string" } },
@@ -462,7 +559,8 @@ module.exports = async function handler(req, res) {
     return res.status(401).json({ galat: "Masuk dulu sebelum memakai AI." });
   }
   var adaLampiran = Array.isArray(b.lampiran) && b.lampiran.length > 0;
-  if (!materi.trim() && !adaLampiran) {
+  var tautan = String(b.tautan || "").trim();
+  if (!materi.trim() && !adaLampiran && !tautan) {
     return res.status(400).json({ galat: "Materinya masih kosong." });
   }
   if (!materi.trim()) {
@@ -552,6 +650,20 @@ module.exports = async function handler(req, res) {
     }
 
     var t = TUGAS[tugas];
+    var dariTautan = null;
+    if (tautan) {
+      var hasilTautan = await ambilTautan(tautan);
+      if (hasilTautan.galat) return res.status(400).json({ galat: hasilTautan.galat });
+      if (hasilTautan.pdf) {
+        // PDF dari tautan diperlakukan sama seperti PDF yang diunggah.
+        lampiran = lampiran.concat([{ jenis: "dokumen", mime: "application/pdf", data: hasilTautan.pdf }]);
+        materi = (materi ? materi + "\n\n" : "") + "Sumber: " + hasilTautan.sumber;
+      } else {
+        materi = (materi ? materi + "\n\n---\n" : "") + hasilTautan.teks;
+      }
+      dariTautan = hasilTautan.sumber;
+      if (materi.length > MAKS_MASUKAN) materi = materi.slice(0, MAKS_MASUKAN);
+    }
     // Aturan penulisan ditempel ke semua tugas, bukan disalin satu per satu
     // ke tiap pemicu, supaya tidak ada yang terlewat saat menambah tugas.
     var sistemPakai = t.sistem + ATURAN_FORMAT;
@@ -715,6 +827,7 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({
       hasil: hasil,
       penyedia: NAMA_AI,
+      dariTautan: dariTautan,
       pakai: kuota.pakai,
       batas: kuota.tanpaKuota ? null : kuota.batas,
       token: pemakaian
