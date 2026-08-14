@@ -4681,11 +4681,12 @@ function viewAlat(){
         esc(j.galat || ("Server menjawab " + r.status)) + "</p>";
       return;
     }
-    var nama = {penyedia:"Penyedia AI", model:"Model", kunciApi:"Kunci API",
-                penyimpanan:"Penyimpanan (Redis)", sesi:"Sesi login",
+    var nama = {penyedia:"Penyedia AI", model:"Model utama", urutanCoba:"Urutan cadangan",
+                kunciApi:"Kunci API", penyimpanan:"Penyimpanan (Redis)", sesi:"Sesi login",
                 izinAi:"Izin AI akun ini", panggilanUji:"Panggilan uji ke server AI"};
     var html = "";
     Object.keys(nama).forEach(function(k){
+      if(j.laporan[k] === undefined) return;
       var v = String(j.laporan[k] || "");
       // Huruf kapital di awal nilai dipakai sebagai penanda gagal, supaya
       // pemakai langsung tahu baris mana yang harus dibenahi.
