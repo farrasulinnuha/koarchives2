@@ -338,6 +338,33 @@ module.exports = async function handler(req, res) {
           var ju = await ru.json();
           lap.panggilanUji = ru.ok ? "BERHASIL"
             : "GAGAL " + ru.status + ": " + ((ju.error && ju.error.message) || "tidak diketahui");
+
+          /* Nama model yang tersedia berbeda-beda per kunci dan berubah
+             seiring model lama dipensiunkan, jadi jangan ditebak: tanyakan
+             langsung ke Google dan tunjukkan daftarnya. */
+          if (!ru.ok) {
+            try {
+              var rl = await fetch(
+                "https://generativelanguage.googleapis.com/v1beta/models?pageSize=100",
+                { headers: { "x-goog-api-key": KUNCI_GEMINI } });
+              var jl = await rl.json();
+              if (rl.ok && Array.isArray(jl.models)) {
+                lap.modelTersedia = jl.models.filter(function (m) {
+                  return (m.supportedGenerationMethods || []).indexOf("generateContent") !== -1;
+                }).map(function (m) {
+                  return String(m.name || "").replace(/^models\//, "");
+                }).filter(function (n) {
+                  // Varian khusus (embedding, TTS, live) bukan untuk tugas ini.
+                  return n && !/embedding|aqa|tts|image|live|native-audio/.test(n);
+                });
+              } else {
+                lap.modelTersedia = ["(gagal mengambil daftar: " +
+                  ((jl.error && jl.error.message) || rl.status) + ")"];
+              }
+            } catch (e) {
+              lap.modelTersedia = ["(gagal mengambil daftar: " + String(e.message || e) + ")"];
+            }
+          }
         } else {
           var ra = await fetch("https://api.anthropic.com/v1/messages", {
             method: "POST",

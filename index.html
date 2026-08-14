@@ -967,6 +967,7 @@ body.berlatar .butir{opacity:.25}
 .lam-gagal{border-color:var(--buruk);color:var(--buruk)}
 .lam-gagal .lam-tanda{background:var(--buruk)}
 @media (max-width:560px){.lam-dok{height:70vh;min-height:320px}}
+.uji-model{display:flex;flex-wrap:wrap;gap:6px}
 .uji-daftar{display:flex;flex-direction:column;gap:6px}
 .uji-baris{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline;padding:9px 12px;
   border-radius:10px;border:1px solid var(--garis);background:rgba(var(--kaca),.5);font-size:13.5px}
@@ -4335,7 +4336,25 @@ function viewAlat(){
               '<span class="uji-nilai' + (buruk ? " uji-buruk" : baik ? " uji-baik" : "") + '">' +
               esc(v) + "</span></div>";
     });
+    // Kalau modelnya ditolak, daftar yang benar-benar tersedia untuk kunci
+    // ini jauh lebih berguna daripada tebakan nama model.
+    var mt = j.laporan.modelTersedia;
+    if(Array.isArray(mt) && mt.length){
+      html += '<div class="uji-baris" style="flex-direction:column;align-items:stretch">';
+      html += '<span class="uji-nama" style="min-width:0;margin-bottom:8px">Model yang tersedia untuk kuncimu \u2014 pilih satu, ' +
+              'lalu isikan sebagai variabel <b>GEMINI_MODEL</b> di Vercel</span>';
+      html += '<div class="uji-model">';
+      mt.forEach(function(nm){
+        html += '<button class="t kcl" type="button" data-salin-model="' + esc(nm) + '">' + esc(nm) + "</button>";
+      });
+      html += "</div></div>";
+    }
     isi.innerHTML = html;
+    Array.prototype.forEach.call(isi.querySelectorAll("[data-salin-model]"), function(b){
+      b.addEventListener("click", function(){
+        salin(b.dataset.salinModel, "Nama model disalin. Tempel ke GEMINI_MODEL di Vercel, lalu deploy ulang.");
+      });
+    });
   });
 
   var bOcr = document.getElementById("jalanOcr");
