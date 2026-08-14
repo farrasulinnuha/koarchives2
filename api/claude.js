@@ -49,6 +49,9 @@ function daftarModel(nilai, bawaan) {
   return d.length ? d : [bawaan];
 }
 var DAFTAR_GEMINI = daftarModel(process.env.GEMINI_MODEL, "gemini-2.5-pro");
+
+var KUNCI_OPENAI = process.env.OPENAI_API_KEY || process.env.CHATGPT_API_KEY || "";
+var DAFTAR_OPENAI = daftarModel(process.env.OPENAI_MODEL, "gpt-5");
 var MODEL_GEMINI = DAFTAR_GEMINI[0];
 
 /* Kalau dua-duanya terpasang, AI_PENYEDIA yang menentukan. Kalau tidak
@@ -57,29 +60,40 @@ var PENYEDIA = (function () {
   var pilih = String(process.env.AI_PENYEDIA || "").toLowerCase();
   if (pilih === "gemini" && KUNCI_GEMINI) return "gemini";
   if (pilih === "claude" && KUNCI_API) return "claude";
+  if ((pilih === "openai" || pilih === "chatgpt") && KUNCI_OPENAI) return "openai";
   if (KUNCI_API) return "claude";
   if (KUNCI_GEMINI) return "gemini";
+  if (KUNCI_OPENAI) return "openai";
   return "";
 })();
 
-var NAMA_AI = PENYEDIA === "gemini" ? "Gemini" : "Claude";
+var NAMA_AI = PENYEDIA === "gemini" ? "Gemini" : PENYEDIA === "openai" ? "ChatGPT" : "Claude";
+function namaPenyedia(p) {
+  return p === "gemini" ? "Gemini" : p === "openai" ? "ChatGPT" : "Claude";
+}
 
 /* Urutan percobaan: semua model penyedia utama dulu, lalu penyedia
    cadangan kalau kuncinya juga terpasang. */
 function urutanCoba() {
-  var g = KUNCI_GEMINI ? DAFTAR_GEMINI.map(function (m) {
-    return { penyedia: "gemini", model: m };
-  }) : [];
-  var c = KUNCI_API ? String(DAFTAR_CLAUDE_ENV).split(",").map(function (x) { return x.trim(); })
-    .filter(Boolean).map(function (m) { return { penyedia: "claude", model: m }; }) : [];
-  return PENYEDIA === "gemini" ? g.concat(c) : c.concat(g);
+  var kelompok = {
+    gemini: KUNCI_GEMINI ? DAFTAR_GEMINI.map(function (m) { return { penyedia: "gemini", model: m }; }) : [],
+    claude: KUNCI_API ? daftarModel(DAFTAR_CLAUDE_ENV, "claude-opus-5").map(function (m) {
+      return { penyedia: "claude", model: m }; }) : [],
+    openai: KUNCI_OPENAI ? DAFTAR_OPENAI.map(function (m) { return { penyedia: "openai", model: m }; }) : []
+  };
+  // Penyedia pilihan dulu, sisanya jadi cadangan dengan urutan tetap.
+  var urut = [PENYEDIA].concat(["gemini", "claude", "openai"].filter(function (x) { return x !== PENYEDIA; }));
+  var keluar = [];
+  urut.forEach(function (n) { keluar = keluar.concat(kelompok[n] || []); });
+  return keluar;
 }
 
 /* Layak dicoba ke model berikutnya: sedang penuh, sedang bermasalah, atau
    modelnya memang tidak ada. Galat izin dan permintaan cacat tidak diulang
    \u2014 mengulanginya hanya membuang kuota. */
 function bolehLanjut(status) {
-  return status === 404 || status === 429 || status === 500 ||
+  // 415 dipakai saat satu penyedia memang tidak sanggup membaca lampirannya.
+  return status === 404 || status === 415 || status === 429 || status === 500 ||
          status === 502 || status === 503 || status === 504;
 }
 
@@ -551,7 +565,8 @@ module.exports = async function handler(req, res) {
     var lap = {
       penyedia: PENYEDIA || "(belum ada kunci API)",
       model: PENYEDIA === "gemini" ? MODEL_GEMINI : MODEL,
-      kunciApi: PENYEDIA ? "terpasang" : "TIDAK ADA",
+      kunciApi: [KUNCI_GEMINI ? "Gemini" : "", KUNCI_API ? "Claude" : "", KUNCI_OPENAI ? "ChatGPT" : ""]
+        .filter(Boolean).join(" + ") || "TIDAK ADA",
       // Vercel mengisi variabel ini sendiri. Tanpa penanda begini, "sudah
       // ter-deploy atau belum" cuma bisa ditebak dari ada-tidaknya fitur.
       versi: (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7) || "(tidak diketahui)",
@@ -604,6 +619,16 @@ module.exports = async function handler(req, res) {
             var jm = await rm.json();
             hasilTiap.push(cal.model + " \u2014 " + (rm.ok ? "BISA DIPAKAI"
               : "gagal " + rm.status + ": " + ((jm.error && jm.error.message) || "").slice(0, 90)));
+          } else if (cal.penyedia === "openai") {
+            var ro = await fetch("https://api.openai.com/v1/chat/completions", {
+              method: "POST",
+              headers: { "Authorization": "Bearer " + KUNCI_OPENAI, "content-type": "application/json" },
+              body: JSON.stringify({ model: cal.model, max_completion_tokens: 16,
+                messages: [{ role: "user", content: "ok" }] })
+            });
+            var jo = await ro.json();
+            hasilTiap.push(cal.model + " \u2014 " + (ro.ok ? "BISA DIPAKAI"
+              : "gagal " + ro.status + ": " + ((jo.error && jo.error.message) || "").slice(0, 90)));
           } else {
             var ra = await fetch("https://api.anthropic.com/v1/messages", {
               method: "POST",
@@ -780,7 +805,7 @@ module.exports = async function handler(req, res) {
       if (hasilTautan.galat) return res.status(400).json({ galat: hasilTautan.galat });
       if (hasilTautan.pdf) {
         // PDF dari tautan diperlakukan sama seperti PDF yang diunggah.
-        lampiran = lampiran.concat([{ jenis: "dokumen", mime: "application/pdf", data: hasilTautan.pdf }]);
+        lampiran = lampiran.concat([{ jenis: "pdf", mime: "application/pdf", data: hasilTautan.pdf }]);
         materi = (materi ? materi + "\n\n" : "") + "Sumber: " + hasilTautan.sumber;
       } else {
         materi = (materi ? materi + "\n\n---\n" : "") + hasilTautan.teks;
@@ -855,6 +880,53 @@ module.exports = async function handler(req, res) {
       };
     }
 
+    /* ChatGPT tidak membaca PDF lewat jalur ini, jadi kalau ada lampiran PDF
+       kandidat OpenAI dilewati saja \u2014 lebih baik dipakai penyedia lain
+       daripada isinya diam-diam hilang dari yang dikirim. */
+    async function cobaOpenAI(namaModel) {
+      var adaPdf = lampiran.some(function (l) { return l.jenis !== "gambar"; });
+      if (adaPdf) return { status: 415, pesan: "ChatGPT dilewati: lampiran PDF tidak bisa dibaca lewat jalur ini." };
+
+      var isi = [{ type: "text", text: materi }];
+      lampiran.forEach(function (l) {
+        isi.push({ type: "image_url", image_url: { url: "data:" + l.mime + ";base64," + l.data } });
+      });
+
+      var r = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + KUNCI_OPENAI, "content-type": "application/json" },
+        body: JSON.stringify({
+          model: namaModel,
+          // Mode JSON dijamin sah; bentuknya dituntun lewat skema di pemicu,
+          // karena mode ketat OpenAI menolak sebagian skema kita.
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: sistemPakai +
+              "\n\nBALAS HANYA JSON yang cocok dengan skema ini:\n" + JSON.stringify(t.skema) },
+            { role: "user", content: isi }
+          ]
+        })
+      });
+      var j = await r.json();
+      if (!r.ok) {
+        return { status: r.status,
+          pesan: (j && j.error && j.error.message) || ("ChatGPT menjawab " + r.status) };
+      }
+      var pil = (j.choices || [])[0];
+      if (!pil) return { status: 502, pesan: "ChatGPT tidak mengembalikan jawaban." };
+      if (pil.finish_reason === "length") {
+        return { tolak: "Jawabannya terpotong karena terlalu panjang. Potong materinya jadi beberapa bagian." };
+      }
+      if (pil.finish_reason === "content_filter") {
+        return { tolak: "ChatGPT menolak memproses materi ini." };
+      }
+      return {
+        ok: true,
+        teks: (pil.message && pil.message.content) || "",
+        pemakaian: j.usage ? (j.usage.prompt_tokens + " masuk / " + j.usage.completion_tokens + " keluar") : null
+      };
+    }
+
     async function cobaClaude(namaModel) {
       var isiPesan = [];
       for (var li = 0; li < lampiran.length; li++) {
@@ -911,8 +983,8 @@ module.exports = async function handler(req, res) {
       var pilih = calon[ci];
       var hasilCoba;
       try {
-        hasilCoba = pilih.penyedia === "gemini"
-          ? await cobaGemini(pilih.model)
+        hasilCoba = pilih.penyedia === "gemini" ? await cobaGemini(pilih.model)
+          : pilih.penyedia === "openai" ? await cobaOpenAI(pilih.model)
           : await cobaClaude(pilih.model);
       } catch (e) {
         hasilCoba = { status: 503, pesan: String(e.message || e) };
@@ -922,7 +994,7 @@ module.exports = async function handler(req, res) {
         teks = hasilCoba.teks;
         pemakaian = hasilCoba.pemakaian;
         modelDipakai = pilih.model;
-        penyediaDipakai = pilih.penyedia === "gemini" ? "Gemini" : "Claude";
+        penyediaDipakai = namaPenyedia(pilih.penyedia);
         break;
       }
       // Penolakan isi bukan soal model; ganti model tidak akan menolong.
