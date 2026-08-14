@@ -8673,8 +8673,39 @@ function tanganiTergusur(pesan){
   setToken(null);
   setSesi(null);
   try{ localStorage.removeItem(KUNCI + "/masuk"); }catch(e){}
+  // Arsip yang sudah terunduh ikut dibuang. Tanpa ini, materi berbayar
+  // masih bisa dibaca dari simpanan peramban setelah sesinya dicabut.
+  try{
+    var sim = JSON.parse(localStorage.getItem(KUNCI) || "null");
+    if(sim && typeof sim === "object"){
+      sim.entri = []; sim.berkas = []; sim.agenda = [];
+      localStorage.setItem(KUNCI, JSON.stringify(sim));
+    }
+  }catch(e){}
   beritahu("Sesi ditutup", pesan || "Akun ini dipakai masuk di perangkat lain.")
     .then(function(){ location.reload(); });
+}
+
+/* Perangkat lama tidak akan pernah tahu sesinya dicabut kalau tidak pernah
+   bertanya. Denyut ini yang membuat batas satu perangkat benar-benar terasa,
+   bukan cuma benar di server. */
+var denyutJalan = null;
+function mulaiDenyut(){
+  if(denyutJalan) return;
+  async function periksa(){
+    if(!SERVER.ada || !SERVER.token || sudahTergusur) return;
+    var j = await srv("denyut", {});
+    if(j && !j.tergusur && j.hidup === false){
+      tanganiTergusur("Sesi ini sudah tidak berlaku. Akunmu dipakai masuk di perangkat lain.");
+    }
+  }
+  denyutJalan = setInterval(periksa, 45000);
+  // Kembali ke tab atau membuka layar ponsel adalah saat paling mungkin
+  // sesinya sudah direbut perangkat lain, jadi diperiksa saat itu juga.
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible") periksa();
+  });
+  window.addEventListener("focus", periksa);
 }
 
 async function srv(aksi, data){
@@ -8987,6 +9018,7 @@ function layarMasuk(pesanAwal){
     DAFTAR_AKUN = null;
     var jt = await srv("muat", {});
     if(!jt.galat) pasangTugasan(jt.tugasan);
+    mulaiDenyut();
     g.remove();
     document.querySelector(".app").style.display = "";
     terapkanTema();
@@ -9022,6 +9054,7 @@ function adaPublik(){
     pribadi = (awal.pribadi && typeof awal.pribadi === "object") ? awal.pribadi : pribadiKosong();
     pasangTugasan(awal.tugasan);
     PENDAFTARAN_BUKA = awal.pendaftaran === true;
+    if(awal.akun) mulaiDenyut();
     if(awal.masukLuar) MASUK_LUAR = awal.masukLuar;
     tanganiTiketSso();
     tanganiPulangGoogle();

@@ -653,6 +653,11 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    /* ---- denyut: cek sesi saja, ringan, dipanggil berkala ---- */
+    if (aksi === "denyut") {
+      return res.status(200).json({ hidup: !!akun, pengguna: akun ? akun.pengguna : null });
+    }
+
     /* ---- muat (tanpa token = tamu, hanya materi publik) ---- */
     if (aksi === "muat") {
       var arsipSemua = await bacaArsip();
