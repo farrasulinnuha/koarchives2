@@ -967,6 +967,13 @@ body.berlatar .butir{opacity:.25}
 .lam-gagal{border-color:var(--buruk);color:var(--buruk)}
 .lam-gagal .lam-tanda{background:var(--buruk)}
 @media (max-width:560px){.lam-dok{height:70vh;min-height:320px}}
+.uji-daftar{display:flex;flex-direction:column;gap:6px}
+.uji-baris{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline;padding:9px 12px;
+  border-radius:10px;border:1px solid var(--garis);background:rgba(var(--kaca),.5);font-size:13.5px}
+.uji-nama{flex:none;min-width:170px;font-weight:700;color:var(--redup)}
+.uji-nilai{flex:1;min-width:0;font-weight:700;word-break:break-word}
+.uji-baik{color:var(--baik)}
+.uji-buruk{color:var(--buruk)}
 .format-bar{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-bottom:8px}
 .format-b{min-width:36px;height:34px;padding:0 10px;border-radius:9px;cursor:pointer;
   border:1px solid var(--garis);background:rgba(var(--kaca),.65);color:var(--tinta);
@@ -4054,7 +4061,10 @@ function viewAlat(){
     h += '<div class="kotak-aksi"><button class="t utama" id="susunOutline" type="button">Susun jadi outline</button>';
     h += '<button class="t utama" id="susunKuis" type="button">Jadikan kuis</button>';
     h += '<button class="t" id="jalanOcr" type="button">Baca teks (OCR)</button>';
+    h += '<button class="t sunyi" id="ujiAi" type="button">Uji sambungan</button>';
     h += '<span id="claudeKabar" style="font-size:13px;color:var(--redup);align-self:center"></span></div>';
+    h += '<div class="b" id="kotakUji" style="display:none"><label>Hasil pemeriksaan</label>';
+    h += '<div id="ujiHasil" class="uji-daftar"></div></div>';
     h += '<div class="b" id="kotakOcr" style="display:none"><label for="hasilOcr">Hasil bacaan</label>';
     h += '<textarea id="hasilOcr" placeholder="Teks hasil OCR akan muncul di sini."></textarea>';
     h += '<div class="kotak-aksi"><button class="t" id="ocrSalin" type="button">Salin</button>';
@@ -4283,6 +4293,50 @@ function viewAlat(){
   if(bO) bO.addEventListener("click", function(){ jalankanClaude("outline", bO); });
   var bK = document.getElementById("susunKuis");
   if(bK) bK.addEventListener("click", function(){ jalankanClaude("kuis", bK); });
+
+  var bUji = document.getElementById("ujiAi");
+  if(bUji) bUji.addEventListener("click", async function(){
+    var kotak = document.getElementById("kotakUji");
+    var isi = document.getElementById("ujiHasil");
+    kotak.style.display = "";
+    isi.innerHTML = '<p class="bantu" style="margin:0">Memeriksa\u2026</p>';
+    var bekal = await bekalAkun();
+    var r, j;
+    try{
+      r = await fetch(API_CLAUDE, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({tugas:"cek", token: bekal ? bekal.token : null})
+      });
+      j = await r.json();
+    }catch(e){
+      isi.innerHTML = '<p style="margin:0;color:var(--buruk);font-weight:700">Tidak bisa menghubungi /api/claude. Berkas api/claude.js mungkin belum ikut ter-deploy.</p>';
+      return;
+    }
+    if(r.status === 404){
+      isi.innerHTML = '<p style="margin:0;color:var(--buruk);font-weight:700">/api/claude tidak ditemukan (404). Pastikan folder api ikut ter-deploy ke Vercel.</p>';
+      return;
+    }
+    if(!j.laporan){
+      isi.innerHTML = '<p style="margin:0;color:var(--buruk);font-weight:700">' +
+        esc(j.galat || ("Server menjawab " + r.status)) + "</p>";
+      return;
+    }
+    var nama = {penyedia:"Penyedia AI", model:"Model", kunciApi:"Kunci API",
+                penyimpanan:"Penyimpanan (Redis)", sesi:"Sesi login",
+                izinAi:"Izin AI akun ini", panggilanUji:"Panggilan uji ke server AI"};
+    var html = "";
+    Object.keys(nama).forEach(function(k){
+      var v = String(j.laporan[k] || "");
+      // Huruf kapital di awal nilai dipakai sebagai penanda gagal, supaya
+      // pemakai langsung tahu baris mana yang harus dibenahi.
+      var buruk = /^(TIDAK|GAGAL|TOKEN)/.test(v);
+      var baik = /^(ya|BERHASIL|terpasang|sah)/.test(v);
+      html += '<div class="uji-baris"><span class="uji-nama">' + esc(nama[k]) + "</span>" +
+              '<span class="uji-nilai' + (buruk ? " uji-buruk" : baik ? " uji-baik" : "") + '">' +
+              esc(v) + "</span></div>";
+    });
+    isi.innerHTML = html;
+  });
 
   var bOcr = document.getElementById("jalanOcr");
   if(bOcr) bOcr.addEventListener("click", function(){ jalankanOcr(bOcr); });

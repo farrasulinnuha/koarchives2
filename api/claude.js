@@ -299,6 +299,62 @@ module.exports = async function handler(req, res) {
   var tugas = String(b.tugas || "").slice(0, 20);
   var materi = String(b.materi || "");
 
+  /* Pemeriksaan mandiri. Pemakai tidak bisa melihat log Vercel, jadi
+     endpointnya sendiri yang melaporkan langkah mana yang putus. */
+  if (tugas === "cek") {
+    var lap = {
+      penyedia: PENYEDIA || "(belum ada kunci API)",
+      model: PENYEDIA === "gemini" ? MODEL_GEMINI : MODEL,
+      kunciApi: PENYEDIA ? "terpasang" : "TIDAK ADA",
+      penyimpanan: (URL_KV && TOKEN_KV) ? "terpasang" : "TIDAK ADA (KV_REST_API_URL)",
+      sesi: "belum diperiksa",
+      izinAi: "belum diperiksa",
+      panggilanUji: "belum diperiksa"
+    };
+
+    if (!token) lap.sesi = "TIDAK ADA TOKEN \u2014 keluar lalu masuk lagi";
+    else if (!(URL_KV && TOKEN_KV)) lap.sesi = "tidak bisa diperiksa tanpa penyimpanan";
+    else {
+      var au = null;
+      try { au = await akunDariToken(token); }
+      catch (e) { lap.sesi = "GAGAL menghubungi penyimpanan: " + String(e.message || e); }
+      if (au) {
+        lap.sesi = "sah, akun " + au.pengguna;
+        lap.izinAi = au.ai === true ? "ya" : "TIDAK \u2014 nyalakan di Atur > Akun";
+      } else if (lap.sesi === "belum diperiksa") {
+        lap.sesi = "TOKEN TIDAK BERLAKU \u2014 keluar lalu masuk lagi";
+      }
+    }
+
+    if (PENYEDIA && lap.izinAi === "ya") {
+      try {
+        if (PENYEDIA === "gemini") {
+          var ru = await fetch(
+            "https://generativelanguage.googleapis.com/v1beta/models/" +
+              encodeURIComponent(MODEL_GEMINI) + ":generateContent",
+            { method: "POST",
+              headers: { "x-goog-api-key": KUNCI_GEMINI, "content-type": "application/json" },
+              body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "balas: ok" }] }] }) });
+          var ju = await ru.json();
+          lap.panggilanUji = ru.ok ? "BERHASIL"
+            : "GAGAL " + ru.status + ": " + ((ju.error && ju.error.message) || "tidak diketahui");
+        } else {
+          var ra = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: { "x-api-key": KUNCI_API, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+            body: JSON.stringify({ model: MODEL, max_tokens: 16, messages: [{ role: "user", content: "balas: ok" }] })
+          });
+          var ja = await ra.json();
+          lap.panggilanUji = ra.ok ? "BERHASIL"
+            : "GAGAL " + ra.status + ": " + ((ja.error && ja.error.message) || "tidak diketahui");
+        }
+      } catch (e) {
+        lap.panggilanUji = "GAGAL: " + String(e.message || e);
+      }
+    }
+    return res.status(200).json({ laporan: lap });
+  }
+
   if (!TUGAS[tugas]) {
     return res.status(400).json({ galat: "Permintaan tidak lengkap." });
   }
