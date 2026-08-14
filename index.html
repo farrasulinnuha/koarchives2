@@ -8035,11 +8035,14 @@ function layarKunci(pesanAwal){
       kotak.appendChild(p);
     }
 
+    // Selalu melapor. Diam adalah keadaan terburuk: tidak ada yang bisa
+    // membedakan "belum diatur" dari "rusak" kalau layarnya kosong saja.
+    kotak.innerHTML = '<div class="masuk-pisah"><span>atau</span></div>';
     if(!MASUK_LUAR.google && !MASUK_LUAR.sso){
-      kotak.style.margin = "0";
+      kabarKecil("Masuk lewat Google/SSO belum aktif di server ini. " +
+        "Cek Alat \u2192 Uji sambungan setelah masuk sebagai pemilik.", true);
       return;
     }
-    kotak.innerHTML = '<div class="masuk-pisah"><span>atau</span></div>';
 
     if(MASUK_LUAR.sso){
       var tb = document.createElement("button");
@@ -8053,7 +8056,10 @@ function layarKunci(pesanAwal){
       kotak.appendChild(tb);
     }
 
-    if(!MASUK_LUAR.google) return;
+    if(!MASUK_LUAR.google){
+      kabarKecil("Google belum aktif di server ini.", true);
+      return;
+    }
 
     // Tombol buatan sendiri selalu digambar; pustaka Google hanya bonus.
     var tg = document.createElement("button");
@@ -8066,6 +8072,7 @@ function layarKunci(pesanAwal){
       '<path fill="#EA4335" d="M24 10.7c4.1 0 6.9 1.8 8.5 3.3l6.2-6C34.9 4.5 29.9 2 24 2 15.5 2 8.1 6.9 4.4 14.1l7.1 5.5c1.8-5.3 6.7-8.9 12.5-8.9z"/></svg>' +
       "<span>Masuk dengan Google</span>";
     tg.addEventListener("click", mulaiGoogleAlih);
+    kabarKecil("Alamat pulang yang dipakai: " + location.origin + location.pathname);
     kotak.appendChild(tg);
 
     var wadah = document.createElement("div");
