@@ -399,6 +399,50 @@ var TUGAS = {
       "bukan potongan atau ringkasan.",
     skema: SKEMA_RAPI, format: true
   },
+  kuisDari: {
+    sistem: DASAR + "\n\nUbah materi yang diberikan menjadi SATU entri bertipe \"kuis\" " +
+      "bergaya UKMPPD.\n\n" +
+      "BENTUK SOAL:\n" +
+      "- Setiap soal berupa vignette klinis: usia dan jenis kelamin, keluhan utama dan " +
+      "durasinya, temuan pemeriksaan fisik yang relevan (tanda vital bila menentukan), " +
+      "lalu hasil penunjang bila perlu. Tutup dengan pertanyaan yang tegas: diagnosis " +
+      "paling mungkin, tatalaksana awal, pemeriksaan penunjang berikutnya, atau " +
+      "mekanisme yang mendasari.\n" +
+      "- Lima pilihan (A-E). Pengecohnya harus masuk akal: diagnosis banding yang benar-benar " +
+      "mirip, bukan pilihan asal yang jelas salah.\n" +
+      "- Utamakan yang HIGH-YIELD: yang sering keluar di UKMPPD dan sering ditanya penguji, " +
+      "bukan detail langka.\n" +
+      "- Pakai istilah dan dosis yang lazim di Indonesia bila materinya menyebutkan.\n\n" +
+      "PEMBAHASAN: terangkan kenapa kuncinya benar DAN kenapa tiap pengecoh salah, " +
+      "singkat tapi berisi.\n\n" +
+      "BATAS: hanya boleh memakai isi materi yang diberikan. Kalau materinya tidak cukup " +
+      "untuk membuat soal yang layak, buat lebih sedikit soal — jangan mengarang fakta, " +
+      "angka, atau dosis yang tidak ada di materi. Kolom \"isi\" diisi ringkasan satu " +
+      "paragraf tentang cakupan kuis ini.",
+    skema: SKEMA_ENTRI
+  },
+  bahasSoal: {
+    sistem: DASAR + "\n\nDi bawah ini kumpulan soal beserta kunci dan pembahasannya. " +
+      "Kelompokkan menurut PENYAKIT atau TOPIK yang diujikan, lalu untuk tiap penyakit " +
+      "keluarkan SATU entri bertipe \"outline\".\n\n" +
+      "Susunan tiap outline:\n" +
+      "## Definisi\n## Patofisiologi ringkas\n## Manifestasi klinis\n" +
+      "## Diagnosis (termasuk kriteria dan penunjang kunci)\n## Diagnosis banding\n" +
+      "## Tatalaksana\n## Yang sering ditanya penguji\n## Rujukan\n\n" +
+      "ATURAN RUJUKAN — INI PALING PENTING:\n" +
+      "- JANGAN PERNAH mengarang rujukan. Dilarang keras menulis DOI, nomor halaman, " +
+      "nomor volume, tahun terbit, atau judul artikel yang tidak kamu yakini benar.\n" +
+      "- Tulis rujukan pada tingkat yang memang kamu yakini, misalnya nama buku ajar " +
+      "standar (\"Harrison's Principles of Internal Medicine\"), nama bab StatPearls " +
+      "(\"StatPearls: Septic Shock\"), atau nama panduan organisasi profesi " +
+      "(\"Surviving Sepsis Campaign\", \"PPK PERKI\", \"Pedoman Nasional Pelayanan Kedokteran\").\n" +
+      "- Kalau ragu, tulis jenis sumbernya saja tanpa detail. Lebih baik tidak lengkap " +
+      "daripada salah.\n" +
+      "- Tutup bagian Rujukan dengan baris persis: " +
+      "\"*Rujukan di atas adalah penunjuk arah, wajib diperiksa sendiri sebelum dikutip.*\"\n\n" +
+      "Jangan menambah penyakit yang tidak muncul di soal-soal itu.",
+    skema: SKEMA_ENTRI
+  },
   ocr: {
     sistem: DASAR + "\n\nSalin SELURUH teks yang terbaca pada gambar atau dokumen " +
       "yang dilampirkan, apa adanya, tanpa merangkum dan tanpa menambah apa pun. " +

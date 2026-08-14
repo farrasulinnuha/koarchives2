@@ -995,6 +995,10 @@ body.berlatar .butir{opacity:.25}
 .kaya table{width:100%;border-collapse:collapse;margin:0 0 11px}
 .kaya th,.kaya td{border:1px solid var(--garis);padding:6px 9px;text-align:left}
 .bag-kaya{min-height:150px}
+.t.ai-t{background:linear-gradient(120deg,var(--a1),var(--a3));color:var(--atas-aksen);
+  border-color:transparent}
+.t.ai-t:hover{filter:brightness(1.07)}
+.t.ai-t:disabled{opacity:.6;cursor:default}
 .format-bar{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-bottom:8px}
 .format-b{min-width:36px;height:34px;padding:0 10px;border-radius:9px;cursor:pointer;
   border:1px solid var(--garis);background:rgba(var(--kaca),.65);color:var(--tinta);
@@ -3004,7 +3008,18 @@ function viewDetail(){
   }
   if(bolehSunting) h += '<button class="t" id="sunting" type="button">Sunting</button>';
   if(pemilik()) h += '<button class="t bahaya" id="hapus" type="button">Hapus</button>';
+  // Kedua tombol AI ini terbuka untuk kontributor juga, bukan cuma pemilik
+  // \u2014 yang membatasi tetap bendera izin AI di tiap akun.
+  if(bisaTulis() && (e.isi || "").trim().length > 200){
+    h += '<button class="t ai-t" id="buatKuisAi" type="button">Buat kuis dengan AI</button>';
+  }
+  if(bisaTulis() && (e.soal || []).length >= 2){
+    h += '<button class="t ai-t" id="buatBahasAi" type="button">Outline pembahasan</button>';
+  }
   h += "</div>";
+  if(bisaTulis() && ((e.isi || "").trim().length > 200 || (e.soal || []).length >= 2)){
+    h += '<p id="aiKabarDetail" class="bantu" style="margin:10px 0 0"></p>';
+  }
 
   if(sk){
     h += '<p style="margin:12px 0 0;font-size:13px;color:var(--redup)">Skor terbaik <b style="color:var(--baik)">' +
@@ -3053,6 +3068,65 @@ function viewDetail(){
   document.getElementById("balik").addEventListener("click", function(){ ui.view = "arsip"; ui.entriId = null; render(); });
   var m = document.getElementById("mulai");
   if(m) m.addEventListener("click", function(){ mulaiKuis(e, null); });
+
+  async function jalankanDetailAi(tombol, tugas, bahan, sukses){
+    var kabar = document.getElementById("aiKabarDetail");
+    var labelAsli = tombol.textContent;
+    tombol.disabled = true; tombol.textContent = "Menyusun\u2026";
+    kabar.textContent = "Ini bisa sampai satu menit.";
+    kabar.style.color = "var(--redup)";
+    var r = await mintaClaude(tugas, bahan, []);
+    tombol.disabled = false; tombol.textContent = labelAsli;
+    if(!r.ok){
+      kabar.textContent = r.mati ? "Sambungan ke AI belum aktif." : r.pesan;
+      kabar.style.color = "var(--buruk)";
+      return;
+    }
+    var entri = (r.hasil && r.hasil.entri) || [];
+    if(!entri.length){
+      kabar.textContent = "AI tidak mengembalikan apa pun.";
+      kabar.style.color = "var(--buruk)";
+      return;
+    }
+    // Hasilnya mewarisi stase entri asalnya, bukan jatuh ke bawaan.
+    entri.forEach(function(x){ x.stase = e.stase; });
+    var imp = imporJson(JSON.stringify(entri));
+    if(!imp.ok){
+      kabar.textContent = imp.pesan; kabar.style.color = "var(--buruk)"; return;
+    }
+    var tulis = await simpanImpor(imp);
+    if(!tulis.ok){
+      kabar.textContent = tulis.pesan; kabar.style.color = "var(--buruk)"; return;
+    }
+    kabar.textContent = sukses(entri);
+    kabar.style.color = "var(--baik)";
+    setTimeout(function(){ ui.view = "arsip"; render(); window.scrollTo(0,0); }, 1100);
+  }
+
+  var bKuisAi = document.getElementById("buatKuisAi");
+  if(bKuisAi) bKuisAi.addEventListener("click", function(){
+    jalankanDetailAi(bKuisAi, "kuisDari",
+      "JUDUL MATERI: " + e.judul + "\n\n" + e.isi,
+      function(x){ return "Kuis dibuat: " + ((x[0].soal || []).length) + " soal. Periksa dulu sebelum dipakai."; });
+  });
+
+  var bBahasAi = document.getElementById("buatBahasAi");
+  if(bBahasAi) bBahasAi.addEventListener("click", async function(){
+    if(!await tanya("Buat outline dari soal-soal ini?",
+        "AI akan mengelompokkan " + e.soal.length + " soal menurut penyakitnya, " +
+        "lalu menyusun satu outline per penyakit lengkap dengan daftar rujukan.\n\n" +
+        "Rujukannya adalah penunjuk arah, bukan kutipan siap pakai \u2014 AI bisa keliru " +
+        "menyebut sumber, jadi periksa sendiri sebelum kamu kutip di laporan.",
+        {ok:"Susun"})) return;
+    var ringkas = e.soal.map(function(sl, i){
+      return (i + 1) + ". " + sl.q + "\n" +
+        (sl.opsi || []).map(function(o, k){ return "   " + String.fromCharCode(65 + k) + ". " + o; }).join("\n") +
+        "\n   KUNCI: " + String.fromCharCode(65 + (sl.jawaban || 0)) +
+        (sl.penjelasan ? "\n   PEMBAHASAN: " + sl.penjelasan : "");
+    }).join("\n\n");
+    jalankanDetailAi(bBahasAi, "bahasSoal", "DARI KUIS: " + e.judul + "\n\n" + ringkas,
+      function(x){ return x.length + " outline penyakit dibuat. Periksa rujukannya sebelum dipakai."; });
+  });
   var s = document.getElementById("sunting");
   if(s) s.addEventListener("click", function(){ bukaEditor(e.id); });
   var hp = document.getElementById("hapus");
