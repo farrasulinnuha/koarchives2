@@ -1103,6 +1103,11 @@ input[type=file]{width:100%;padding:10px;border-radius:11px;border:1px dashed va
   margin-top:14px;padding-top:12px;border-top:1px solid var(--garis)}
 .ct-waktu{font-size:12.5px;font-weight:600;color:var(--redup)}
 .ct-aksi{display:flex;gap:6px}
+.masuk-luar{margin-top:16px}
+.masuk-pisah{display:flex;align-items:center;gap:10px;margin:4px 0 12px;
+  font-size:12px;font-weight:700;color:var(--redup)}
+.masuk-pisah::before,.masuk-pisah::after{content:"";flex:1;height:1px;background:var(--garis)}
+.masuk-sso{width:100%;justify-content:center}
 .tautan-teks{background:none;border:0;padding:0;cursor:pointer;font:inherit;font-weight:800;
   color:var(--a2);text-decoration:underline;text-underline-offset:3px}
 .tautan-teks:hover{opacity:.8}
@@ -8010,6 +8015,46 @@ function layarKunci(pesanAwal){
     toast("Menampilkan materi gratis.");
   });
 
+  /* Tombol Google dan SSO baru muncul kalau servernya memang mengaturnya,
+     supaya tidak ada tombol yang pasti gagal ditekan. */
+  (async function(){
+    var kotak = document.getElementById("kluar");
+    if(!kotak || (!MASUK_LUAR.google && !MASUK_LUAR.sso)) return;
+    kotak.innerHTML = '<div class="masuk-pisah"><span>atau</span></div>';
+
+    if(MASUK_LUAR.sso){
+      var tb = document.createElement("button");
+      tb.type = "button";
+      tb.className = "t masuk-sso";
+      tb.textContent = "Masuk dengan " + MASUK_LUAR.ssoNama;
+      tb.addEventListener("click", function(){
+        var kembali = location.origin + location.pathname;
+        // CAS mengembalikan tiketnya ke alamat ini sebagai ?ticket=
+        location.href = MASUK_LUAR.ssoAlamat + "?service=" + encodeURIComponent(kembali);
+      });
+      kotak.appendChild(tb);
+    }
+
+    if(MASUK_LUAR.google){
+      var wadah = document.createElement("div");
+      wadah.id = "gbtn";
+      wadah.style.cssText = "display:flex;justify-content:center;margin-top:10px;min-height:44px";
+      kotak.appendChild(wadah);
+      var siap = await muatSkripGoogle();
+      if(!siap){
+        wadah.innerHTML = '<span class="bantu">Tombol Google tidak bisa dimuat. Periksa sambungan internet.</span>';
+        return;
+      }
+      window.google.accounts.id.initialize({
+        client_id: MASUK_LUAR.googleId,
+        callback: function(resp){
+          masukDenganGoogle(resp.credential, document.getElementById("kgalat"), function(){ g.remove(); });
+        }
+      });
+      window.google.accounts.id.renderButton(wadah, {theme:"outline", size:"large", text:"signin_with", shape:"pill"});
+    }
+  })();
+
   document.getElementById("klupa").addEventListener("click", async function(){
     var pilih = await dialog({
       judul:"Lupa sandi", jenis:"borang", ok:"Lanjut",
@@ -8328,6 +8373,60 @@ async function cekClaude(){
 
 /* true kalau server mengizinkan orang mendaftar sendiri. Diisi saat muat. */
 var PENDAFTARAN_BUKA = false;
+var MASUK_LUAR = {google:false, googleId:"", sso:false, ssoNama:"", ssoAlamat:""};
+
+/* Tombol Google digambar oleh pustaka Google sendiri; skripnya dimuat
+   sekali saja dan hanya kalau memang dipakai. */
+function muatSkripGoogle(){
+  if(window.google && window.google.accounts) return Promise.resolve(true);
+  if(muatSkripGoogle.jalan) return muatSkripGoogle.jalan;
+  muatSkripGoogle.jalan = new Promise(function(selesai){
+    var sk = document.createElement("script");
+    sk.src = "https://accounts.google.com/gsi/client";
+    sk.async = true; sk.defer = true;
+    sk.onload = function(){ selesai(true); };
+    sk.onerror = function(){ selesai(false); };
+    document.head.appendChild(sk);
+  });
+  return muatSkripGoogle.jalan;
+}
+
+async function masukDenganGoogle(kredensial, galatEl, tutup){
+  var j = await srv("masukGoogle", {kredensial:kredensial});
+  if(j.galat){ if(galatEl) galatEl.textContent = j.galat; return; }
+  setToken(j.token);
+  pasangAkunServer(j.akun);
+  pasangArsipServer(j.arsip);
+  pribadi = (j.pribadi && typeof j.pribadi === "object") ? j.pribadi : pribadiKosong();
+  DAFTAR_AKUN = null;
+  if(tutup) tutup();
+  document.querySelector(".app").style.display = "";
+  terapkanTema();
+  render();
+  toast("Selamat datang, " + (j.akun.nama || j.akun.pengguna) + ".");
+}
+
+/* CAS memulangkan pengguna ke sini dengan ?ticket=. Tiketnya ditukar ke
+   server lalu dibuang dari alamat supaya tidak ikut tersimpan di riwayat. */
+async function tanganiTiketSso(){
+  var tiket = new URLSearchParams(location.search).get("ticket");
+  if(!tiket) return;
+  var layanan = location.origin + location.pathname;
+  history.replaceState({}, "", layanan);
+  var j = await srv("masukSso", {tiket:tiket, layanan:layanan});
+  if(j.galat){ beritahu("Masuk lewat SSO gagal", j.galat); return; }
+  setToken(j.token);
+  pasangAkunServer(j.akun);
+  pasangArsipServer(j.arsip);
+  pribadi = (j.pribadi && typeof j.pribadi === "object") ? j.pribadi : pribadiKosong();
+  DAFTAR_AKUN = null;
+  var gerbang = document.getElementById("gerbangKunci");
+  if(gerbang) gerbang.remove();
+  document.querySelector(".app").style.display = "";
+  terapkanTema();
+  render();
+  toast("Selamat datang, " + (j.akun.nama || j.akun.pengguna) + ".");
+}
 
 function layarMasuk(pesanAwal){
   if(document.getElementById("gerbangKunci")) return;
@@ -8348,6 +8447,7 @@ function layarMasuk(pesanAwal){
       '<input id="ksandi" type="password" autocomplete="current-password"></div>' +
       '<div class="gerbang-galat" id="kgalat" role="alert">' + esc(pesanAwal || "") + "</div>" +
       '<div class="kotak-aksi"><button class="t utama" type="submit" id="kbuka">Masuk</button></div>' +
+      '<div id="kluar" class="masuk-luar"></div>' +
       '<p style="font-size:12px;margin:14px 0 0"><button type="button" class="tautan-teks" id="klupa">Lupa sandi?</button></p>' +
       '<p id="kalih" style="font-size:12px;color:var(--redup);margin:16px 0 0;line-height:1.5">Belum punya akun? Hubungi pemilik arsip.</p>' +
     "</form>";
@@ -8449,6 +8549,8 @@ function adaPublik(){
     pribadi = (awal.pribadi && typeof awal.pribadi === "object") ? awal.pribadi : pribadiKosong();
     pasangTugasan(awal.tugasan);
     PENDAFTARAN_BUKA = awal.pendaftaran === true;
+    if(awal.masukLuar) MASUK_LUAR = awal.masukLuar;
+    tanganiTiketSso();
     pindahBerkasLama();
     muatPribadi.terpakai = true;
     terapkanTema();

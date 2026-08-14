@@ -92,6 +92,7 @@ function akunAman(a) {
     pengguna: a.pengguna, nama: a.nama, peran: a.peran,
     tingkat: a.tingkat, exp: a.exp || "", aktif: a.aktif !== false,
     ai: a.ai === true, dibuat: a.dibuat || "", mandiri: a.mandiri === true,
+    surel: a.surel || "", asalMasuk: a.asalMasuk || "",
     universitas: a.universitas || "", angkatan: a.angkatan || "", grup: a.grup || "",
     nim: a.nim || "", staseKini: a.staseKini || "", rsKini: a.rsKini || "",
     telepon: a.telepon || "", bio: a.bio || ""
@@ -126,6 +127,140 @@ async function siapkanPemilik() {
   };
   await tulisAkun(akun);
   return akun;
+}
+
+/* ------------------------------------------------------- Masuk pihak luar */
+
+var GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
+var SSO_CAS = (process.env.SSO_CAS_URL || "").replace(/\/+$/, "");
+var SSO_NAMA = process.env.SSO_NAMA || "SSO kampus";
+var SSO_SUREL = (process.env.SSO_SUREL_DOMAIN || "").toLowerCase();
+
+var jwksSimpan = { pada: 0, kunci: {} };
+
+async function kunciGoogle(kid) {
+  // Kunci Google berputar; disimpan sebentar supaya tidak diambil tiap masuk.
+  if (Date.now() - jwksSimpan.pada > 3600000 || !jwksSimpan.kunci[kid]) {
+    var r = await fetch("https://www.googleapis.com/oauth2/v3/certs");
+    if (!r.ok) throw new Error("Tidak bisa mengambil kunci Google.");
+    var j = await r.json();
+    var peta = {};
+    (j.keys || []).forEach(function (k) { peta[k.kid] = k; });
+    jwksSimpan = { pada: Date.now(), kunci: peta };
+  }
+  return jwksSimpan.kunci[kid] || null;
+}
+
+function dariB64Url(t) { return Buffer.from(String(t), "base64url"); }
+
+/* Memeriksa ID token Google sampai ke tanda tangannya. Tanpa langkah ini
+   siapa pun bisa mengarang token dan masuk sebagai siapa saja. */
+async function periksaGoogle(idToken) {
+  if (!GOOGLE_CLIENT_ID) return { galat: "Masuk dengan Google belum diatur di server." };
+  var bagian = String(idToken || "").split(".");
+  if (bagian.length !== 3) return { galat: "Token Google tidak berbentuk sah." };
+
+  var kepala, muatan;
+  try {
+    kepala = JSON.parse(dariB64Url(bagian[0]).toString("utf8"));
+    muatan = JSON.parse(dariB64Url(bagian[1]).toString("utf8"));
+  } catch (e) { return { galat: "Token Google tidak terbaca." }; }
+  if (kepala.alg !== "RS256") return { galat: "Algoritma token tidak didukung." };
+
+  var jwk = await kunciGoogle(kepala.kid);
+  if (!jwk) return { galat: "Kunci penanda tangan token tidak dikenali." };
+
+  var sah;
+  try {
+    sah = crypto.createVerify("RSA-SHA256")
+      .update(bagian[0] + "." + bagian[1])
+      .verify(crypto.createPublicKey({ key: jwk, format: "jwk" }), dariB64Url(bagian[2]));
+  } catch (e) { return { galat: "Tanda tangan token tidak bisa diperiksa." }; }
+  if (!sah) return { galat: "Tanda tangan token tidak cocok." };
+
+  if (muatan.aud !== GOOGLE_CLIENT_ID) return { galat: "Token ini bukan untuk aplikasi ini." };
+  if (["accounts.google.com", "https://accounts.google.com"].indexOf(muatan.iss) === -1) {
+    return { galat: "Penerbit token bukan Google." };
+  }
+  if (!muatan.exp || muatan.exp * 1000 < Date.now()) return { galat: "Token Google sudah kedaluwarsa." };
+  if (muatan.email_verified !== true && muatan.email_verified !== "true") {
+    return { galat: "Alamat surel Google itu belum terverifikasi." };
+  }
+  if (!muatan.email) return { galat: "Token tidak memuat alamat surel." };
+  return { surel: String(muatan.email).toLowerCase(), nama: String(muatan.name || ""), sub: String(muatan.sub || "") };
+}
+
+/* CAS dipakai banyak SSO kampus, termasuk UGM. Alamat dasarnya diisi lewat
+   SSO_CAS_URL supaya tidak dipatok di kode. */
+async function periksaCas(tiket, layanan) {
+  if (!SSO_CAS) return { galat: SSO_NAMA + " belum diatur di server." };
+  if (!tiket) return { galat: "Tiket SSO kosong." };
+  var alamat = SSO_CAS + "/serviceValidate?service=" + encodeURIComponent(layanan) +
+               "&ticket=" + encodeURIComponent(tiket);
+  var r;
+  try { r = await fetch(alamat); }
+  catch (e) { return { galat: "Server " + SSO_NAMA + " tidak bisa dihubungi." }; }
+  var xml = await r.text();
+  if (!/authenticationSuccess/i.test(xml)) {
+    var sebab = (xml.match(/<cas:authenticationFailure[^>]*>([\s\S]*?)<\//i) || [])[1];
+    return { galat: "Tiket SSO ditolak" + (sebab ? ": " + sebab.trim().slice(0, 120) : ".") };
+  }
+  var pengguna = (xml.match(/<cas:user>([\s\S]*?)<\/cas:user>/i) || [])[1];
+  if (!pengguna) return { galat: "Balasan SSO tidak memuat identitas." };
+  pengguna = pengguna.trim().toLowerCase();
+  var surel = (xml.match(/<cas:(?:email|mail)>([\s\S]*?)<\/cas:(?:email|mail)>/i) || [])[1];
+  var nama = (xml.match(/<cas:(?:nama|name|displayName|cn)>([\s\S]*?)<\/cas:(?:nama|name|displayName|cn)>/i) || [])[1];
+  return {
+    surel: (surel ? surel.trim() : (SSO_SUREL ? pengguna + "@" + SSO_SUREL : pengguna)).toLowerCase(),
+    nama: nama ? nama.trim() : pengguna,
+    sub: pengguna
+  };
+}
+
+/* Satu jalur untuk kedua cara masuk: cari akun yang surelnya sudah
+   ditautkan, kalau belum ada baru dibuatkan — dan hanya kalau
+   pendaftaran mandiri memang sedang dibuka. */
+async function masukLuar(profil, asal, req, res) {
+  var indeks = await ambil("surel:" + profil.surel, null);
+  var akunLuar = indeks ? await bacaAkun(indeks) : null;
+
+  if (!akunLuar) {
+    var bukaDaftarLuar = await ambil("atur:pendaftaran", false);
+    if (bukaDaftarLuar !== true) {
+      return res.status(403).json({
+        galat: "Surel " + profil.surel + " belum terdaftar di arsip ini, dan pendaftaran sedang ditutup. " +
+          "Minta pemilik arsip menautkan surel itu ke akunmu."
+      });
+    }
+    var dasar = normalPengguna(profil.surel.split("@")[0]) || "akun";
+    var calon = dasar;
+    for (var i = 2; await bacaAkun(calon); i++) calon = dasar + i;
+    akunLuar = {
+      pengguna: calon,
+      nama: profil.nama || calon,
+      surel: profil.surel,
+      garam: acakHex(16),
+      hash: "",                 // masuk lewat penyedia luar, tidak punya sandi lokal
+      asalMasuk: asal,
+      peran: "pengakses", tingkat: "publik",
+      exp: "", aktif: true, ai: false, mandiri: true,
+      dibuat: new Date().toISOString().slice(0, 10)
+    };
+    await tulisAkun(akunLuar);
+    await simpan("surel:" + profil.surel, akunLuar.pengguna);
+  }
+
+  if (akunLuar.aktif === false) return res.status(403).json({ galat: "Akun ini dinonaktifkan." });
+  if (akunLuar.exp && akunLuar.exp < new Date().toISOString().slice(0, 10)) {
+    return res.status(403).json({ galat: "Akun ini sudah lewat masa berlaku." });
+  }
+
+  var tokenLuar = await buatSesi(akunLuar.pengguna, jejakPermintaan(req));
+  return res.status(200).json({
+    token: tokenLuar, akun: akunAman(akunLuar),
+    arsip: saringUntuk(await bacaArsip(), akunLuar),
+    pribadi: await ambil("pribadi:" + akunLuar.pengguna, null)
+  });
 }
 
 /* --------------------------------------------------------------- Sesi */
@@ -354,6 +489,23 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    /* ---- masuk lewat Google / SSO kampus ---- */
+    if (aksi === "masukGoogle") {
+      var pg = await periksaGoogle(b.kredensial);
+      if (pg.galat) return res.status(401).json({ galat: pg.galat });
+      return masukLuar(pg, "google", req, res);
+    }
+
+    if (aksi === "masukSso") {
+      var layananSso = String(b.layanan || "").slice(0, 300);
+      if (!/^https?:\/\//.test(layananSso)) {
+        return res.status(400).json({ galat: "Alamat layanan tidak sah." });
+      }
+      var ps = await periksaCas(b.tiket, layananSso);
+      if (ps.galat) return res.status(401).json({ galat: ps.galat });
+      return masukLuar(ps, "sso", req, res);
+    }
+
     /* ---- lupa sandi ----
        Tanpa layanan email, pemulihan dijembatani pemilik: pemakai mengajukan,
        pemilik membuat kode sekali pakai, lalu menyampaikannya lewat jalur
@@ -472,6 +624,9 @@ module.exports = async function handler(req, res) {
         pribadi: akun ? await ambil("pribadi:" + akun.pengguna, null) : null,
         tugasan: tugasanUntuk(await bacaTugasan(), akun),
         pendaftaran: (await ambil("atur:pendaftaran", false)) === true,
+        masukLuar: { google: !!GOOGLE_CLIENT_ID, googleId: GOOGLE_CLIENT_ID,
+                     sso: !!SSO_CAS, ssoNama: SSO_NAMA,
+                     ssoAlamat: SSO_CAS ? SSO_CAS + "/login" : "" },
         adaAkun: (await daftarPengguna()).length > 0
       });
     }
@@ -791,6 +946,13 @@ module.exports = async function handler(req, res) {
       baru.exp = String(b.exp || "");
       baru.aktif = b.aktif !== false;
       baru.ai = b.ai === true;
+      // Menautkan surel membuat akun ini bisa dimasuki lewat Google/SSO.
+      if (typeof b.surel === "string") {
+        var surelBaru = b.surel.trim().toLowerCase().slice(0, 200);
+        if (baru.surel && baru.surel !== surelBaru) await redis(["DEL", "surel:" + baru.surel]);
+        baru.surel = surelBaru;
+        if (surelBaru) await simpan("surel:" + surelBaru, p);
+      }
 
       if (b.sandi) {
         if (String(b.sandi).length < 6) return res.status(400).json({ galat: "Sandi minimal 6 karakter." });
