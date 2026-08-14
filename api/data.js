@@ -364,10 +364,43 @@ function bolehLihat(e, akun) {
   return true;
 }
 
+/* Versi terkunci: judulnya tetap terlihat supaya pembaca tahu ada apa saja
+   di dalam, tapi isi, soal, dan lampirannya TIDAK ikut terkirim. Yang tidak
+   dikirim tidak bisa dibongkar dari sisi peramban. */
+function entriTerkunci(e) {
+  // Sengaja pendek dan dipotong di batas kata. Cuplikan panjang justru
+  // membocorkan angka dan dosis yang jadi nilai jual materinya.
+  var bersih = String(e.isi || "")
+    .replace(/^#{1,6}\s+/gm, "").replace(/[*`>|_\[\]]/g, "")
+    .replace(/\s+/g, " ").trim();
+  var cuplikan = bersih.slice(0, 80);
+  if (bersih.length > 80) cuplikan = cuplikan.replace(/\s+\S*$/, "");
+  return {
+    id: e.id, stase: e.stase, tipe: e.tipe, akses: e.akses,
+    judul: e.judul, tanggal: e.tanggal, tag: Array.isArray(e.tag) ? e.tag : [],
+    status: e.status, penulis: e.penulis,
+    isi: "", soal: [], lampiran: [], tab: false,
+    terkunci: true,
+    jumlahSoal: Array.isArray(e.soal) ? e.soal.length : 0,
+    cuplikan: cuplikan
+  };
+}
+
 function saringUntuk(arsip, akun) {
   // Satu sumber kebenaran dengan bolehLihat(), supaya izin daftar arsip dan
   // izin lampiran tidak bisa berbeda diam-diam.
-  var terlihat = (arsip.entri || []).filter(function (e) { return bolehLihat(e, akun); });
+  var peran = akun ? akun.peran : "";
+  var tingkat = akun ? akun.tingkat : "publik";
+  var terlihat = [];
+
+  (arsip.entri || []).forEach(function (e) {
+    if (bolehLihat(e, akun)) { terlihat.push(e); return; }
+    // Materi berbayar yang sudah terbit tetap ditampilkan sebagai kartu
+    // terkunci; yang belum terbit sama sekali tidak disinggung.
+    if (e.status === "terbit" && e.akses !== "publik" && peran !== "pemilik" && tingkat !== "penuh") {
+      terlihat.push(entriTerkunci(e));
+    }
+  });
   return Object.assign({}, arsip, { entri: terlihat });
 }
 
@@ -701,8 +734,17 @@ module.exports = async function handler(req, res) {
 
     /* ---- hapus entri (pemilik) ---- */
     if (aksi === "entriHapus") {
-      if (akun.peran !== "pemilik") return res.status(403).json({ galat: "Hanya pemilik yang boleh menghapus." });
+      if (akun.peran !== "pemilik" && akun.peran !== "kontributor") {
+        return res.status(403).json({ galat: "Akun ini hanya boleh membaca." });
+      }
       var arsipH = await bacaArsip();
+      var sasaranH = arsipH.entri.filter(function (e) { return e.id === b.id; })[0];
+      if (!sasaranH) return res.status(404).json({ galat: "Entri tidak ditemukan." });
+      // Kontributor hanya boleh menghapus tulisannya sendiri. Tanpa cek ini
+      // satu kontributor bisa menghapus arsip pemilik dan kawan-kawannya.
+      if (akun.peran !== "pemilik" && sasaranH.penulis !== akun.pengguna) {
+        return res.status(403).json({ galat: "Cuma penulisnya yang bisa menghapus entri ini." });
+      }
       var sisa = arsipH.entri.filter(function (e) { return e.id !== b.id; });
       await simpan("arsip:entri", sisa);
       await simpan("arsip:versi", (arsipH.versi || 0) + 1);
@@ -760,6 +802,10 @@ module.exports = async function handler(req, res) {
     }
 
     if (aksi === "agendaTugas") {
+      // Ditegakkan di server juga, bukan cuma disembunyikan di tampilan.
+      if (akun.tingkat !== "penuh" && akun.peran !== "pemilik") {
+        return res.status(403).json({ galat: "Akun tingkat publik belum bisa menugaskan pengingat ke orang lain." });
+      }
       var masukT = b.agenda || {};
       if (!String(masukT.judul || "").trim()) {
         return res.status(400).json({ galat: "Nama kegiatan belum diisi." });
