@@ -1104,6 +1104,8 @@ input[type=file]{width:100%;padding:10px;border-radius:11px;border:1px dashed va
 .ct-waktu{font-size:12.5px;font-weight:600;color:var(--redup)}
 .ct-aksi{display:flex;gap:6px}
 .masuk-luar{margin-top:16px}
+.masuk-google{width:100%;justify-content:center;gap:9px;font-weight:800}
+.masuk-google svg{flex:none}
 .masuk-pisah{display:flex;align-items:center;gap:10px;margin:4px 0 12px;
   font-size:12px;font-weight:700;color:var(--redup)}
 .masuk-pisah::before,.masuk-pisah::after{content:"";flex:1;height:1px;background:var(--garis)}
@@ -8053,6 +8055,19 @@ function layarKunci(pesanAwal){
 
     if(!MASUK_LUAR.google) return;
 
+    // Tombol buatan sendiri selalu digambar; pustaka Google hanya bonus.
+    var tg = document.createElement("button");
+    tg.type = "button";
+    tg.className = "t masuk-google";
+    tg.innerHTML = '<svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true">' +
+      '<path fill="#4285F4" d="M45 24c0-1.6-.1-2.7-.4-3.9H24v7.1h12c-.2 1.9-1.5 4.7-4.4 6.6l6.7 5.2C42.2 35.3 45 30.1 45 24z"/>' +
+      '<path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.3l-6.9-5.4c-1.9 1.3-4.4 2.2-7.6 2.2-5.8 0-10.7-3.8-12.5-9.1l-7.1 5.5C8.1 41.1 15.5 46 24 46z"/>' +
+      '<path fill="#FBBC05" d="M11.5 28.4c-.5-1.4-.8-2.9-.8-4.4s.3-3 .7-4.4l-7.1-5.5C2.9 17 2 20.4 2 24s.9 7 2.4 9.9z"/>' +
+      '<path fill="#EA4335" d="M24 10.7c4.1 0 6.9 1.8 8.5 3.3l6.2-6C34.9 4.5 29.9 2 24 2 15.5 2 8.1 6.9 4.4 14.1l7.1 5.5c1.8-5.3 6.7-8.9 12.5-8.9z"/></svg>' +
+      "<span>Masuk dengan Google</span>";
+    tg.addEventListener("click", mulaiGoogleAlih);
+    kotak.appendChild(tg);
+
     var wadah = document.createElement("div");
     wadah.id = "gbtn";
     wadah.style.cssText = "display:flex;justify-content:center;margin-top:10px;min-height:44px";
@@ -8069,7 +8084,8 @@ function layarKunci(pesanAwal){
 
     var siap = await muatSkripGoogle();
     if(!siap || !(window.google && window.google.accounts && window.google.accounts.id)){
-      kabarKecil("Pustaka Google gagal dimuat \u2014 biasanya karena pemblokir iklan, mode penyamaran yang ketat, atau jaringan yang memblokir accounts.google.com.", true);
+      // Bukan masalah: tombol di atas tidak membutuhkannya.
+      wadah.remove();
       return;
     }
     try{
@@ -8086,12 +8102,7 @@ function layarKunci(pesanAwal){
     }
     // Google menggambarnya di dalam iframe; kalau tetap kosong setelah
     // sesaat, hampir selalu karena origin situs ini belum didaftarkan.
-    setTimeout(function(){
-      if(wadah.childElementCount === 0){
-        kabarKecil("Tombol Google tidak tergambar. Pastikan " + location.origin +
-          " sudah terdaftar di Authorized JavaScript origins pada OAuth Client ID-mu.", true);
-      }
-    }, 2500);
+    setTimeout(function(){ if(wadah.childElementCount === 0) wadah.remove(); }, 2500);
   })();
 
   document.getElementById("klupa").addEventListener("click", async function(){
@@ -8430,6 +8441,50 @@ function muatSkripGoogle(){
   return muatSkripGoogle.jalan;
 }
 
+/* Jalur alih-alamat: tidak memakai pustaka Google sama sekali, jadi tetap
+   jalan di peramban yang memblokir skrip pihak ketiga (Safari, Arc, mode
+   penyamaran, pemblokir iklan). Nonce mengikat balasan ke permintaan ini
+   supaya token dari tempat lain tidak bisa dipakai ulang. */
+function mulaiGoogleAlih(){
+  var acak = new Uint8Array(16);
+  (window.crypto || {}).getRandomValues ? crypto.getRandomValues(acak) : acak.set([1,2,3]);
+  var nonce = Array.from(acak).map(function(x){ return ("0" + x.toString(16)).slice(-2); }).join("");
+  try{ sessionStorage.setItem(KUNCI + "/nonce", nonce); }catch(e){}
+  var kembali = location.origin + location.pathname;
+  var alamat = "https://accounts.google.com/o/oauth2/v2/auth" +
+    "?client_id=" + encodeURIComponent(MASUK_LUAR.googleId) +
+    "&redirect_uri=" + encodeURIComponent(kembali) +
+    "&response_type=id_token" +
+    "&scope=" + encodeURIComponent("openid email profile") +
+    "&nonce=" + encodeURIComponent(nonce) +
+    "&prompt=select_account";
+  location.href = alamat;
+}
+
+/* Google memulangkan tokennya di potongan alamat setelah tanda pagar. */
+async function tanganiPulangGoogle(){
+  if(!location.hash || location.hash.indexOf("id_token=") === -1) return;
+  var isi = new URLSearchParams(location.hash.slice(1));
+  var token = isi.get("id_token");
+  history.replaceState({}, "", location.origin + location.pathname);
+  if(!token) return;
+  var nonce = "";
+  try{ nonce = sessionStorage.getItem(KUNCI + "/nonce") || ""; sessionStorage.removeItem(KUNCI + "/nonce"); }catch(e){}
+  var j = await srv("masukGoogle", {kredensial:token, nonce:nonce});
+  if(j.galat){ beritahu("Masuk dengan Google gagal", j.galat); return; }
+  setToken(j.token);
+  pasangAkunServer(j.akun);
+  pasangArsipServer(j.arsip);
+  pribadi = (j.pribadi && typeof j.pribadi === "object") ? j.pribadi : pribadiKosong();
+  DAFTAR_AKUN = null;
+  var gerbang = document.getElementById("gerbangKunci");
+  if(gerbang) gerbang.remove();
+  document.querySelector(".app").style.display = "";
+  terapkanTema();
+  render();
+  toast("Selamat datang, " + (j.akun.nama || j.akun.pengguna) + ".");
+}
+
 async function masukDenganGoogle(kredensial, galatEl, tutup){
   var j = await srv("masukGoogle", {kredensial:kredensial});
   if(j.galat){ if(galatEl) galatEl.textContent = j.galat; return; }
@@ -8590,6 +8645,7 @@ function adaPublik(){
     PENDAFTARAN_BUKA = awal.pendaftaran === true;
     if(awal.masukLuar) MASUK_LUAR = awal.masukLuar;
     tanganiTiketSso();
+    tanganiPulangGoogle();
     pindahBerkasLama();
     muatPribadi.terpakai = true;
     terapkanTema();

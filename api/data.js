@@ -155,7 +155,7 @@ function dariB64Url(t) { return Buffer.from(String(t), "base64url"); }
 
 /* Memeriksa ID token Google sampai ke tanda tangannya. Tanpa langkah ini
    siapa pun bisa mengarang token dan masuk sebagai siapa saja. */
-async function periksaGoogle(idToken) {
+async function periksaGoogle(idToken, nonceHarap) {
   if (!GOOGLE_CLIENT_ID) return { galat: "Masuk dengan Google belum diatur di server." };
   var bagian = String(idToken || "").split(".");
   if (bagian.length !== 3) return { galat: "Token Google tidak berbentuk sah." };
@@ -187,6 +187,11 @@ async function periksaGoogle(idToken) {
     return { galat: "Alamat surel Google itu belum terverifikasi." };
   }
   if (!muatan.email) return { galat: "Token tidak memuat alamat surel." };
+  // Nonce mengikat token ke permintaan masuk yang barusan dibuat di
+  // peramban ini, jadi token yang bocor dari tempat lain tidak bisa dipakai.
+  if (nonceHarap && muatan.nonce !== nonceHarap) {
+    return { galat: "Token tidak cocok dengan permintaan masuk dari peramban ini." };
+  }
   return { surel: String(muatan.email).toLowerCase(), nama: String(muatan.name || ""), sub: String(muatan.sub || "") };
 }
 
@@ -491,7 +496,7 @@ module.exports = async function handler(req, res) {
 
     /* ---- masuk lewat Google / SSO kampus ---- */
     if (aksi === "masukGoogle") {
-      var pg = await periksaGoogle(b.kredensial);
+      var pg = await periksaGoogle(b.kredensial, String(b.nonce || "").slice(0, 128));
       if (pg.galat) return res.status(401).json({ galat: pg.galat });
       return masukLuar(pg, "google", req, res);
     }
