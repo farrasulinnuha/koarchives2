@@ -8018,11 +8018,22 @@ function layarKunci(pesanAwal){
 
   /* Tombol Google dan SSO baru muncul kalau servernya memang mengaturnya,
      supaya tidak ada tombol yang pasti gagal ditekan. */
+  /* Bagian ini melaporkan keadaannya sendiri. Sebelumnya, kalau pustaka
+     Google gagal dimuat atau gagal digambar, yang tersisa cuma ruang kosong
+     tanpa satu pun petunjuk kenapa. */
   (async function(){
     var kotak = document.getElementById("kluar");
     if(!kotak) return;
+
+    function kabarKecil(teks, buruk){
+      var p = document.createElement("p");
+      p.className = "bantu";
+      p.style.cssText = "margin:8px 0 0;text-align:center" + (buruk ? ";color:var(--tunggu)" : "");
+      p.textContent = teks;
+      kotak.appendChild(p);
+    }
+
     if(!MASUK_LUAR.google && !MASUK_LUAR.sso){
-      // Dulu di sini cuma disisakan celah kosong tanpa keterangan apa pun.
       kotak.style.margin = "0";
       return;
     }
@@ -8035,22 +8046,33 @@ function layarKunci(pesanAwal){
       tb.textContent = "Masuk dengan " + MASUK_LUAR.ssoNama;
       tb.addEventListener("click", function(){
         var kembali = location.origin + location.pathname;
-        // CAS mengembalikan tiketnya ke alamat ini sebagai ?ticket=
         location.href = MASUK_LUAR.ssoAlamat + "?service=" + encodeURIComponent(kembali);
       });
       kotak.appendChild(tb);
     }
 
-    if(MASUK_LUAR.google){
-      var wadah = document.createElement("div");
-      wadah.id = "gbtn";
-      wadah.style.cssText = "display:flex;justify-content:center;margin-top:10px;min-height:44px";
-      kotak.appendChild(wadah);
-      var siap = await muatSkripGoogle();
-      if(!siap){
-        wadah.innerHTML = '<span class="bantu">Tombol Google tidak bisa dimuat. Periksa sambungan internet.</span>';
-        return;
-      }
+    if(!MASUK_LUAR.google) return;
+
+    var wadah = document.createElement("div");
+    wadah.id = "gbtn";
+    wadah.style.cssText = "display:flex;justify-content:center;margin-top:10px;min-height:44px";
+    kotak.appendChild(wadah);
+
+    if(!MASUK_LUAR.googleId){
+      kabarKecil("Google aktif di server tapi Client ID-nya kosong.", true);
+      return;
+    }
+    if(location.protocol === "file:"){
+      kabarKecil("Tombol Google tidak bisa muncul saat berkas dibuka langsung; buka lewat alamat situsnya.", true);
+      return;
+    }
+
+    var siap = await muatSkripGoogle();
+    if(!siap || !(window.google && window.google.accounts && window.google.accounts.id)){
+      kabarKecil("Pustaka Google gagal dimuat \u2014 biasanya karena pemblokir iklan, mode penyamaran yang ketat, atau jaringan yang memblokir accounts.google.com.", true);
+      return;
+    }
+    try{
       window.google.accounts.id.initialize({
         client_id: MASUK_LUAR.googleId,
         callback: function(resp){
@@ -8058,7 +8080,18 @@ function layarKunci(pesanAwal){
         }
       });
       window.google.accounts.id.renderButton(wadah, {theme:"outline", size:"large", text:"signin_with", shape:"pill"});
+    }catch(err){
+      kabarKecil("Google menolak menggambar tombolnya: " + (err && err.message ? err.message : "sebab tidak diketahui"), true);
+      return;
     }
+    // Google menggambarnya di dalam iframe; kalau tetap kosong setelah
+    // sesaat, hampir selalu karena origin situs ini belum didaftarkan.
+    setTimeout(function(){
+      if(wadah.childElementCount === 0){
+        kabarKecil("Tombol Google tidak tergambar. Pastikan " + location.origin +
+          " sudah terdaftar di Authorized JavaScript origins pada OAuth Client ID-mu.", true);
+      }
+    }, 2500);
   })();
 
   document.getElementById("klupa").addEventListener("click", async function(){
