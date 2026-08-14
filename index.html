@@ -967,6 +967,31 @@ body.berlatar .butir{opacity:.25}
 .lam-gagal{border-color:var(--buruk);color:var(--buruk)}
 .lam-gagal .lam-tanda{background:var(--buruk)}
 @media (max-width:560px){.lam-dok{height:70vh;min-height:320px}}
+.format-bar{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-bottom:8px}
+.format-b{min-width:36px;height:34px;padding:0 10px;border-radius:9px;cursor:pointer;
+  border:1px solid var(--garis);background:rgba(var(--kaca),.65);color:var(--tinta);
+  font:800 13.5px/1 var(--f-teks);display:grid;place-items:center;transition:background .15s}
+.format-b:hover{background:var(--a2);color:var(--atas-aksen);border-color:transparent}
+.format-b:focus-visible{outline:2px solid var(--a2);outline-offset:2px}
+.format-sela{flex:1}
+#tulisKotak textarea{min-height:230px;line-height:1.65}
+.tulis-luas{position:fixed;inset:0;z-index:60;margin:0;padding:18px clamp(14px,5vw,54px) 22px;
+  background:var(--latar);overflow:auto;display:flex;flex-direction:column}
+.tulis-luas .format-bar{position:sticky;top:0;z-index:2;padding:8px 0;
+  background:var(--latar);border-bottom:1px solid var(--garis);margin-bottom:14px}
+.tulis-luas>textarea{flex:1;min-height:60vh}
+.tulis-luas #tulisTab{flex:1;overflow:auto}
+.kunci-gulir{overflow:hidden}
+.bag-b{margin-bottom:14px}
+.bag-kartu{margin-bottom:12px;padding:13px;border-radius:14px;border:1px solid var(--garis);
+  background:rgba(var(--kaca),.42)}
+.bag-kepala{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:9px}
+.bag-nomor{flex:none;padding:3px 9px;border-radius:100px;background:var(--a2);color:var(--atas-aksen);
+  font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+.bag-judul{flex:1;min-width:130px;padding:8px 11px;border-radius:10px;border:1px solid var(--garis);
+  background:rgba(var(--kaca),.75);color:var(--tinta);font:800 14.5px/1.3 var(--f-teks)}
+.bag-kartu textarea{min-height:150px}
+.bag-pengantar{min-height:90px}
 .lam-bagian{flex:none;max-width:170px;padding:5px 8px;border-radius:9px;
   border:1px solid var(--garis);background:rgba(var(--kaca),.7);color:var(--tinta);
   font:700 12.5px/1.3 var(--f-teks)}
@@ -3289,6 +3314,74 @@ function viewKuis(){
    10. Editor
    ===================================================================== */
 
+/* Bilah format: menyunting textarea yang sedang aktif, jadi satu bilah
+   cukup untuk kotak pengantar maupun tiap kotak tab. */
+var FORMAT_TOMBOL = [
+  {k:"tebal",  nm:"B",   jd:"Tebal",          bungkus:"**"},
+  {k:"miring", nm:"I",   jd:"Miring",         bungkus:"*"},
+  {k:"kode",   nm:"&lt;/&gt;", jd:"Kode",     bungkus:"`"},
+  {k:"judul",  nm:"H",   jd:"Sub-judul",      awalan:"### "},
+  {k:"daftar", nm:"\u2022", jd:"Daftar titik", awalan:"- "},
+  {k:"nomor",  nm:"1.",  jd:"Daftar nomor",   awalan:"1. ", bernomor:true},
+  {k:"kutip",  nm:"\u201C", jd:"Kutipan",      awalan:"> "}
+];
+
+function bilahFormat(){
+  var h = '<div class="format-bar" role="toolbar" aria-label="Format tulisan">';
+  FORMAT_TOMBOL.forEach(function(t){
+    h += '<button class="format-b" type="button" data-format="' + t.k +
+         '" title="' + esc(t.jd) + '" aria-label="' + esc(t.jd) + '">' + t.nm + "</button>";
+  });
+  h += '<span class="format-sela"></span>';
+  h += '<button class="format-b" type="button" id="tulisLuas" aria-pressed="false" ' +
+       'title="Layar fokus" aria-label="Perbesar layar tulis">Fokus</button>';
+  h += "</div>";
+  return h;
+}
+
+function terapkanFormat(ta, kunci){
+  var t = FORMAT_TOMBOL.filter(function(x){ return x.k === kunci; })[0];
+  if(!ta || !t) return;
+  var mulai = ta.selectionStart, akhir = ta.selectionEnd;
+  var isi = ta.value;
+
+  if(t.bungkus){
+    var pilih = isi.slice(mulai, akhir) || t.jd.toLowerCase();
+    var sudah = isi.slice(mulai - t.bungkus.length, mulai) === t.bungkus &&
+                isi.slice(akhir, akhir + t.bungkus.length) === t.bungkus;
+    if(sudah){
+      // Klik kedua melepas tandanya, bukan menumpuknya jadi ****.
+      ta.value = isi.slice(0, mulai - t.bungkus.length) + pilih +
+                 isi.slice(akhir + t.bungkus.length);
+      ta.setSelectionRange(mulai - t.bungkus.length, akhir - t.bungkus.length);
+    } else {
+      ta.value = isi.slice(0, mulai) + t.bungkus + pilih + t.bungkus + isi.slice(akhir);
+      ta.setSelectionRange(mulai + t.bungkus.length, mulai + t.bungkus.length + pilih.length);
+    }
+  } else {
+    // Awalan berlaku per baris, supaya beberapa baris terpilih jadi satu daftar.
+    var kiri = isi.lastIndexOf("\n", mulai - 1) + 1;
+    var kanan = isi.indexOf("\n", akhir);
+    if(kanan === -1) kanan = isi.length;
+    var baris = isi.slice(kiri, kanan).split("\n");
+    var semuaSudah = baris.every(function(b){
+      return t.bernomor ? /^\d+\.\s/.test(b) : b.indexOf(t.awalan) === 0;
+    });
+    var olah = baris.map(function(b, i){
+      if(semuaSudah){
+        return t.bernomor ? b.replace(/^\d+\.\s/, "") : b.slice(t.awalan.length);
+      }
+      // Ganti jenis daftar harus menggantikan, bukan menumpuk jadi "- 1. isi".
+      var bersih = b.replace(/^(?:[-*+]\s|\d+\.\s|>\s|#{1,6}\s)/, "");
+      return (t.bernomor ? (i + 1) + ". " : t.awalan) + bersih;
+    });
+    ta.value = isi.slice(0, kiri) + olah.join("\n") + isi.slice(kanan);
+    ta.setSelectionRange(kiri, kiri + olah.join("\n").length);
+  }
+  ta.focus();
+  ta.dispatchEvent(new Event("input", {bubbles:true}));
+}
+
 function bukaEditor(id){
   if(!bisaTulis()) return mintaSandi();
   sunting = id;
@@ -3349,8 +3442,13 @@ function viewEditor(){
   h += '<div class="b"><label for="fTag">Tag</label><input id="fTag" type="text" value="' + esc((e.tag||[]).join(", ")) + '" placeholder="dipisah koma"></div>';
   h += "</div>";
 
-  h += '<div class="b"><label for="fIsi">Isi</label>';
+  h += '<div class="b" id="tulisKotak"><label for="fIsi">Isi</label>';
+  h += bilahFormat();
+  // fIsi tetap jadi sumber kebenaran meski mode tab menampilkan beberapa
+  // kotak: semua kode lain (impor, pemilih tab lampiran, simpan) membacanya
+  // dari sini, jadi tidak ada yang perlu ikut diubah.
   h += '<textarea id="fIsi" placeholder="Tulis pakai markdown ringkas">' + esc(e.isi) + "</textarea>";
+  h += '<div id="tulisTab" hidden></div>';
   h += '<span class="bantu">Didukung: <code>##</code> judul, daftar, <code>**tebal**</code>, <code>*miring*</code>, <code>`kode`</code>, kutipan <code>&gt;</code>, dan tabel pipa.</span></div>';
 
   // Impor berkas di editor sengaja tidak memanggil Claude: penguraiannya
@@ -3516,6 +3614,120 @@ function viewEditor(){
   // sintaksnya, dan menunjukkan tab apa saja yang sudah terbaca.
   var taIsi = document.getElementById("fIsi");
   var cTab = document.getElementById("fTab");
+  var kotakTab = document.getElementById("tulisTab");
+  var taAktif = taIsi;
+
+  panggung.addEventListener("focusin", function(ev){
+    if(ev.target.tagName === "TEXTAREA") taAktif = ev.target;
+  });
+
+  Array.prototype.forEach.call(panggung.querySelectorAll("[data-format]"), function(b){
+    b.addEventListener("mousedown", function(ev){ ev.preventDefault(); });
+    b.addEventListener("click", function(){ terapkanFormat(taAktif, b.dataset.format); });
+  });
+
+  var btLuas = document.getElementById("tulisLuas");
+  if(btLuas) btLuas.addEventListener("click", function(){
+    var luas = document.getElementById("tulisKotak").classList.toggle("tulis-luas");
+    document.body.classList.toggle("kunci-gulir", luas);
+    btLuas.setAttribute("aria-pressed", luas ? "true" : "false");
+    btLuas.textContent = luas ? "Tutup" : "Fokus";
+    if(luas && taAktif) taAktif.focus();
+  });
+  document.addEventListener("keydown", function(ev){
+    if(ev.key !== "Escape") return;
+    var kt = document.getElementById("tulisKotak");
+    if(kt && kt.classList.contains("tulis-luas") && btLuas) btLuas.click();
+  });
+
+  /* Menulis tab dalam satu kotak panjang berpenanda ## ternyata bikin
+     bingung bahkan bagi yang membuat aplikasinya. Di mode tab, tiap bagian
+     dapat kotaknya sendiri; fIsi disusun ulang dari kotak-kotak itu supaya
+     bentuk datanya tidak berubah sama sekali. */
+  function susunDariKotak(){
+    var bagian = [];
+    Array.prototype.forEach.call(kotakTab.querySelectorAll("[data-bag]"), function(blok){
+      var judul = blok.querySelector(".bag-judul").value.trim();
+      var isi = blok.querySelector(".bag-isi").value;
+      if(!judul && !isi.trim()) return;
+      bagian.push("## " + (judul || "Tanpa judul") + "\n" + isi.replace(/\s+$/, ""));
+    });
+    var peng = kotakTab.querySelector("#bagPengantar");
+    var awal = peng ? peng.value.replace(/\s+$/, "") : "";
+    taIsi.value = (awal ? awal + "\n\n" : "") + bagian.join("\n\n");
+    segarkanDaftarTab();
+    gambarLamSunting();
+  }
+
+  function gambarKotakTab(){
+    var p = pecahBagian(taIsi.value);
+    var h = '<div class="b bag-b"><label for="bagPengantar">Pengantar</label>';
+    h += '<textarea id="bagPengantar" class="bag-pengantar" placeholder="Kalimat pembuka yang tampil di semua tab. Boleh dikosongkan.">' +
+         esc(p.pengantar) + "</textarea></div>";
+    p.bagian.forEach(function(bg, i){
+      h += '<div class="bag-kartu" data-bag="' + i + '">';
+      h += '<div class="bag-kepala"><span class="bag-nomor">Tab ' + (i + 1) + "</span>";
+      h += '<input class="bag-judul" type="text" value="' + esc(bg.judul) +
+           '" placeholder="Nama tab" aria-label="Nama tab ' + (i + 1) + '">';
+      h += '<button class="t kcl" type="button" data-bag-naik="' + i + '"' + (i === 0 ? " disabled" : "") +
+           ' aria-label="Naikkan tab ' + (i + 1) + '">\u2191</button>';
+      h += '<button class="t kcl" type="button" data-bag-turun="' + i + '"' +
+           (i === p.bagian.length - 1 ? " disabled" : "") + ' aria-label="Turunkan tab ' + (i + 1) + '">\u2193</button>';
+      h += '<button class="t kcl" type="button" data-bag-buang="' + i + '" aria-label="Hapus tab ' + (i + 1) + '">Hapus</button>';
+      h += "</div>";
+      h += '<textarea class="bag-isi" placeholder="Isi tab ini" aria-label="Isi tab ' + (i + 1) + '">' +
+           esc(bg.isi) + "</textarea></div>";
+    });
+    h += '<button class="t" type="button" id="bagTambah">+ Tab baru</button>';
+    kotakTab.innerHTML = h;
+
+    Array.prototype.forEach.call(kotakTab.querySelectorAll("textarea, .bag-judul"), function(el){
+      el.addEventListener("input", susunDariKotak);
+    });
+    function tukar(a, b){
+      var bag = pecahBagian(taIsi.value);
+      if(b < 0 || b >= bag.bagian.length) return;
+      var t = bag.bagian[a]; bag.bagian[a] = bag.bagian[b]; bag.bagian[b] = t;
+      taIsi.value = (bag.pengantar ? bag.pengantar + "\n\n" : "") +
+        bag.bagian.map(function(x){ return "## " + x.judul + "\n" + x.isi; }).join("\n\n");
+      gambarKotakTab(); segarkanDaftarTab(); gambarLamSunting();
+    }
+    Array.prototype.forEach.call(kotakTab.querySelectorAll("[data-bag-naik]"), function(b){
+      b.addEventListener("click", function(){ tukar(Number(b.dataset.bagNaik), Number(b.dataset.bagNaik) - 1); });
+    });
+    Array.prototype.forEach.call(kotakTab.querySelectorAll("[data-bag-turun]"), function(b){
+      b.addEventListener("click", function(){ tukar(Number(b.dataset.bagTurun), Number(b.dataset.bagTurun) + 1); });
+    });
+    Array.prototype.forEach.call(kotakTab.querySelectorAll("[data-bag-buang]"), function(b){
+      b.addEventListener("click", async function(){
+        var bag = pecahBagian(taIsi.value);
+        var i = Number(b.dataset.bagBuang);
+        if((bag.bagian[i].isi || "").trim() &&
+           !await tanya("Hapus tab ini?", "\u201C" + bag.bagian[i].judul + "\u201D beserta isinya akan dibuang.",
+                        {ok:"Hapus", bahaya:true})) return;
+        bag.bagian.splice(i, 1);
+        taIsi.value = (bag.pengantar ? bag.pengantar + "\n\n" : "") +
+          bag.bagian.map(function(x){ return "## " + x.judul + "\n" + x.isi; }).join("\n\n");
+        gambarKotakTab(); segarkanDaftarTab(); gambarLamSunting();
+      });
+    });
+    var bt = document.getElementById("bagTambah");
+    if(bt) bt.addEventListener("click", function(){
+      taIsi.value = taIsi.value.replace(/\s+$/, "") + "\n\n## Tab baru\n";
+      gambarKotakTab(); segarkanDaftarTab(); gambarLamSunting();
+      var semua = kotakTab.querySelectorAll(".bag-judul");
+      var akhir = semua[semua.length - 1];
+      if(akhir){ akhir.focus(); akhir.select(); }
+    });
+  }
+
+  function modeTulis(){
+    var pakai = cTab.checked;
+    taIsi.hidden = pakai;
+    kotakTab.hidden = !pakai;
+    if(pakai){ gambarKotakTab(); taAktif = kotakTab.querySelector("textarea") || taIsi; }
+    else { taAktif = taIsi; }
+  }
 
   function segarkanDaftarTab(){
     var el = document.getElementById("fTabDaftar");
@@ -3527,11 +3739,17 @@ function viewEditor(){
       : "Belum ada tab. Tambahkan minimal dua.";
   }
   segarkanDaftarTab();
-  taIsi.addEventListener("input", segarkanDaftarTab);
-  cTab.addEventListener("change", segarkanDaftarTab);
+  taIsi.addEventListener("input", function(){ segarkanDaftarTab(); gambarLamSunting(); });
+  cTab.addEventListener("change", function(){ segarkanDaftarTab(); modeTulis(); gambarLamSunting(); });
+  modeTulis();
 
   var btTabBaru = document.getElementById("fTabBaru");
   if(btTabBaru) btTabBaru.addEventListener("click", async function(){
+    if(cTab.checked){
+      // Di mode kotak, tombol ini cukup meneruskan ke penambah bagian.
+      var bt = document.getElementById("bagTambah");
+      if(bt){ bt.click(); return; }
+    }
     var judul = await mintaTeks("Tab baru", "Nama tab",
       {placeholder:"mis. Pemeriksaan nistagmus", ok:"Sisipkan"});
     if(judul === null) return;
@@ -3544,6 +3762,7 @@ function viewEditor(){
     taIsi.setSelectionRange(taIsi.value.length, taIsi.value.length);
     taIsi.scrollTop = taIsi.scrollHeight;
     segarkanDaftarTab();
+    modeTulis();
   });
 
   var inpBerkasE = document.getElementById("fBerkas");
