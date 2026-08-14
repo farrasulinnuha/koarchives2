@@ -967,6 +967,10 @@ body.berlatar .butir{opacity:.25}
 .lam-gagal{border-color:var(--buruk);color:var(--buruk)}
 .lam-gagal .lam-tanda{background:var(--buruk)}
 @media (max-width:560px){.lam-dok{height:70vh;min-height:320px}}
+.lam-bagian{flex:none;max-width:170px;padding:5px 8px;border-radius:9px;
+  border:1px solid var(--garis);background:rgba(var(--kaca),.7);color:var(--tinta);
+  font:700 12.5px/1.3 var(--f-teks)}
+.lam-dalam{margin-top:22px;padding-top:18px;border-top:1px solid var(--garis)}
 .lam-sunting{display:flex;flex-direction:column;gap:7px}
 .lam-sbaris{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:11px;
   border:1px solid var(--garis);background:rgba(var(--kaca),.5);font-size:14px}
@@ -1016,6 +1020,7 @@ input[type=file]{width:100%;padding:10px;border-radius:11px;border:1px dashed va
 .bk-hitung{flex:none;padding:4px 11px;border-radius:100px;background:var(--garis);
   font-size:13px;font-weight:800}
 .bk-kelar{background:var(--baik-latar);color:var(--baik)}
+.bk-kanan{display:flex;align-items:center;gap:8px;flex:none}
 .bk-bilah{height:7px;border-radius:100px;background:var(--garis);overflow:hidden;margin:12px 0 4px}
 .bk-bilah span{display:block;height:100%;border-radius:100px;
   background:linear-gradient(90deg,var(--a1),var(--a3));transition:width .4s cubic-bezier(.2,.7,.3,1)}
@@ -1052,6 +1057,19 @@ input[type=file]{width:100%;padding:10px;border-radius:11px;border:1px dashed va
 .ag-orang:has(input:checked){background:var(--a2);color:var(--atas-aksen);border-color:transparent}
 .ag-bantu{display:block;margin-top:8px;font-size:12.5px;font-weight:600;color:var(--redup);line-height:1.5}
 .ag-tugas{background:var(--baik-latar);color:var(--baik)}
+.ag-kal{flex:none;width:52px;padding:7px 0 8px;border-radius:12px;text-align:center;
+  background:linear-gradient(160deg,var(--a1),var(--a3));color:var(--atas-aksen);line-height:1}
+.ag-kal b{display:block;font-family:var(--f-tampil);font-size:21px;font-weight:800;letter-spacing:-.02em}
+.ag-kal span{display:block;margin-top:3px;font-size:10.5px;font-weight:800;letter-spacing:.08em;
+  text-transform:uppercase;opacity:.9}
+.ag-kal-lewat{background:var(--buruk)}
+.ag-tanggal{margin-top:4px;font-size:14px;font-weight:700;color:var(--tinta);
+  display:flex;flex-wrap:wrap;align-items:center;gap:7px}
+.ag-jam{padding:2px 8px;border-radius:7px;background:var(--garis);font-size:12.5px;font-weight:800}
+.ag-relatif{font-size:12.5px;font-weight:700;color:var(--redup)}
+.ag-telat{color:var(--buruk)}
+.ag-item{align-items:center}
+.ag-usai .ag-kal{background:var(--garis);color:var(--redup)}
 .ag-jml{display:inline-grid;place-items:center;min-width:24px;height:24px;padding:0 7px;margin-left:6px;
   border-radius:100px;background:var(--garis);font-size:12.5px;font-weight:800;vertical-align:middle}
 .ag-daftar{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column;gap:9px}
@@ -1566,7 +1584,7 @@ var TEKS_BAWAAN = {
   sapa:"Selamat datang kembali",
   deskripsi:"Semua materi, outline, dan latihan soal dari tiap stase. Tambah kapan saja, kerjakan kuisnya saat nunggu visite.",
   kosongJudul:"Masih kosong di sini",
-  kosongIsi:"Tambah entri pertamamu, atau minta Claude menyusunkan dari materi kuliah.",
+  kosongIsi:"Tambah entri pertamamu, atau minta AI menyusunkan dari materi kuliah.",
   labelMateri:"Materi",
   labelOutline:"Outline",
   labelKuis:"Kuis",
@@ -2945,7 +2963,8 @@ function viewDetail(){
     h += "</div>";
     pecah.bagian.forEach(function(bg, i){
       h += '<div class="prosa tab-panel" role="tabpanel" id="panel-' + i + '" aria-labelledby="tab-' + i + '"' +
-           (i === ui.tab ? "" : " hidden") + "><h2>" + esc(bg.judul) + "</h2>" + md(bg.isi) + "</div>";
+           (i === ui.tab ? "" : " hidden") + "><h2>" + esc(bg.judul) + "</h2>" + md(bg.isi) +
+           bagianLampiran(e, bg.judul, true) + "</div>";
     });
     h += kakiSumber + "</section>";
   }
@@ -3397,6 +3416,10 @@ function viewEditor(){
   // mengubah entri yang tersimpan.
   var lamKerja = lampiranEntri(e).map(function(x){ return Object.assign({}, x); });
 
+  function bagianTersedia(){
+    return pecahBagian(document.getElementById("fIsi").value).bagian.map(function(x){ return x.judul; });
+  }
+
   function gambarLamSunting(){
     var kotak = document.getElementById("lamSunting");
     if(!kotak) return;
@@ -3404,12 +3427,30 @@ function viewEditor(){
       kotak.innerHTML = '<p class="bantu" style="margin:0">Belum ada lampiran.</p>';
       return;
     }
+    var bag = bagianTersedia();
+    var pakaiTab = document.getElementById("fTab").checked && bag.length >= 2;
     kotak.innerHTML = lamKerja.map(function(l, i){
       var tanda = l.jenis === "tautan" ? labelTautan(jenisTautan(l.url || "")) : "Berkas";
-      return '<div class="lam-sbaris"><span class="lam-tanda">' + esc(tanda) + "</span>" +
-             '<span class="lam-nama">' + esc(l.judul || l.url || "Berkas") + "</span>" +
-             '<button class="t kcl" type="button" data-lam-buang="' + i + '">Buang</button></div>';
+      var t = '<div class="lam-sbaris"><span class="lam-tanda">' + esc(tanda) + "</span>" +
+              '<span class="lam-nama">' + esc(l.judul || l.url || "Berkas") + "</span>";
+      // Tanpa ini semua lampiran menumpuk di satu tempat dan tidak bisa
+      // dibedakan tab mana yang memilikinya.
+      if(pakaiTab){
+        t += '<select class="lam-bagian" data-lam-bagian="' + i + '" aria-label="Tab untuk lampiran ini">';
+        t += '<option value=""' + (l.bagian ? "" : " selected") + ">Semua tab</option>";
+        bag.forEach(function(nm){
+          t += '<option value="' + esc(nm) + '"' + (l.bagian === nm ? " selected" : "") + ">" + esc(nm) + "</option>";
+        });
+        t += "</select>";
+      }
+      t += '<button class="t kcl" type="button" data-lam-buang="' + i + '">Buang</button></div>';
+      return t;
     }).join("");
+    Array.prototype.forEach.call(kotak.querySelectorAll("[data-lam-bagian]"), function(sel){
+      sel.addEventListener("change", function(){
+        lamKerja[Number(sel.dataset.lamBagian)].bagian = sel.value;
+      });
+    });
     Array.prototype.forEach.call(kotak.querySelectorAll("[data-lam-buang]"), function(b){
       b.addEventListener("click", function(){
         lamKerja.splice(Number(b.dataset.lamBuang), 1);
@@ -3555,7 +3596,7 @@ function viewEditor(){
       tab: document.getElementById("fTab").checked,
       lampiran: lamKerja.map(function(l){
         var salin = {id:l.id, jenis:l.jenis, judul:l.judul, url:l.url || "",
-                     mime:l.mime || "", ukuran:l.ukuran || 0};
+                     mime:l.mime || "", ukuran:l.ukuran || 0, bagian:l.bagian || ""};
         // Di mode luring isinya ikut entri; di mode server isinya sudah
         // diunggah tersendiri, jadi metadatanya saja yang disimpan.
         if(l.jenis === "berkas" && !SERVER.ada && l.data) salin.data = l.data;
@@ -3742,7 +3783,7 @@ function bagianKlarifikasi(){
   if(!klarifikasiSaya().length){
     h += "<p>Belum ada. Saat mengerjakan kuis, tekan <b>Tandai untuk klarifikasi</b> pada pembahasan yang menurutmu janggal \u2014 daftarnya muncul di sini.</p>";
   } else {
-    h += "<p>Ini catatanmu sendiri. Salin daftarnya ke Claude untuk diperiksa, atau kirim ke pemilik arsip.</p>";
+    h += "<p>Ini catatanmu sendiri. Salin daftarnya ke AI untuk diperiksa, atau kirim ke pemilik arsip.</p>";
     klarifikasiSaya().forEach(function(k){
       var e = cariEntri(k.entriId);
       var s = e && e.soal ? e.soal[k.qi] : null;
@@ -3771,20 +3812,20 @@ function viewAlat(){
   h += '<h1 class="judul-besar">Alat</h1>';
   h += '<p style="color:var(--redup);font-size:14px;margin:10px 0 0;max-width:60ch">' +
        (pemilik()
-         ? "Tempel materi atau latihan soal, lalu biarkan Claude menyusunnya. Kalau situsnya belum tersambung ke Claude, alur salin-pemicu di bawah tetap bisa dipakai."
-         : "Salin pemicu, susun di percakapan Claude milikmu sendiri, lalu tempel JSON hasilnya di sini.") + "</p>";
+         ? "Tempel materi atau latihan soal, lalu biarkan Claude menyusunnya. Kalau situsnya belum tersambung ke AI, alur salin-pemicu di bawah tetap bisa dipakai."
+         : "Salin pemicu, susun di percakapan AI milikmu sendiri, lalu tempel JSON hasilnya di sini.") + "</p>";
   h += "</section>";
 
   // Memanggil Claude menagih kunci API pemilik, jadi hanya pemilik.
   if(pemilik()){
-    h += '<section class="kotak kaca"><h2>Susun langsung dengan Claude</h2>';
+    h += '<section class="kotak kaca"><h2>Susun langsung dengan AI</h2>';
     h += '<p id="claudeStatus">Memeriksa sambungan\u2026</p>';
     h += '<div class="b"><label for="bahanClaude">Materi atau latihan soal</label>';
     h += '<textarea id="bahanClaude" placeholder="Tempel catatan kuliah, ringkasan buku, atau latihan soal apa adanya di sini."></textarea>';
     h += '<span class="bantu">Batas sekali kirim sekitar 60 ribu karakter. Kalau materinya lebih panjang, potong jadi beberapa bagian.</span></div>';
     h += '<div class="b"><label for="berkasClaude">Atau ambil dari berkas</label>';
     h += '<input type="file" id="berkasClaude" multiple accept=".pptx,.docx,.pdf,.txt,.md,image/*">';
-    h += '<span class="bantu">PowerPoint dan Word dibaca jadi teks langsung di browser ini. PDF (maks 3 MB) dan foto slide dikirim ke Claude untuk dibaca sendiri \u2014 batas itu datang dari Vercel, bukan dari Claude. Video tidak bisa diproses; kalau cuma mau disimpan dan ditonton, pasang sebagai lampiran tautan di entrinya.</span>';
+    h += '<span class="bantu">PowerPoint dan Word dibaca jadi teks langsung di browser ini. PDF (maks 3 MB) dan foto slide dikirim ke AI untuk dibaca sendiri \u2014 batas itu datang dari Vercel, bukan dari Claude. Video tidak bisa diproses; kalau cuma mau disimpan dan ditonton, pasang sebagai lampiran tautan di entrinya.</span>';
     h += '<div id="berkasDaftar" class="lampiran-daftar"></div></div>';
     h += '<div class="b"><label for="staseClaude">Masuk ke stase</label><select id="staseClaude">';
     semuaStase().forEach(function(x){
@@ -3805,14 +3846,14 @@ function viewAlat(){
 
   if(pemilik()){
   h += '<section class="kotak kaca"><h2>Cara manual: salin pemicu</h2>';
-  h += "<p>Untuk dipakai di percakapan Claude biasa. Salin pemicu, tempel ke Claude bersama materimu, lalu tempel JSON balasannya di kotak berikutnya.</p>";
+  h += "<p>Untuk dipakai di percakapan AI biasa (Claude, Gemini, atau lainnya). Salin pemicu, tempel bersama materimu, lalu tempel JSON balasannya di kotak berikutnya.</p>";
   h += '<div class="kotak-aksi"><button class="t utama" id="cpOutline" type="button">Salin pemicu outline</button>';
   h += '<button class="t" id="cpKuis" type="button">Salin pemicu kuis</button></div></section>';
   }
 
   if(bisaTulis()){
-    h += '<section class="kotak kaca"><h2>Tempel hasil dari Claude</h2>';
-    h += "<p>Tempel JSON yang Claude keluarkan. Boleh satu entri atau banyak sekaligus. Entri dengan judul sama akan diperbarui, bukan diduplikasi.</p>";
+    h += '<section class="kotak kaca"><h2>Tempel hasil dari AI</h2>';
+    h += "<p>Tempel JSON yang AI keluarkan. Boleh satu entri atau banyak sekaligus. Entri dengan judul sama akan diperbarui, bukan diduplikasi.</p>";
     h += '<div class="b"><textarea id="tempel" class="mono" placeholder=\'[{"stase":"ipd","tipe":"outline","judul":"\u2026","isi":"\u2026"}]\'></textarea></div>';
     h += '<div class="kotak-aksi"><button class="t utama" id="impor" type="button">Masukkan ke arsip</button>';
     h += '<span id="statusImpor" style="font-size:13.5px;font-weight:700;color:var(--redup);align-self:center"></span></div></section>';
@@ -3947,7 +3988,7 @@ function viewAlat(){
       semua.forEach(function(b){ if(b) b.disabled = false; });
       tombol.textContent = labelAsli;
       if(!r.ok){
-        kabar.textContent = r.mati ? "Sambungan ke Claude belum aktif." : r.pesan;
+        kabar.textContent = r.mati ? "Sambungan ke AI belum aktif." : r.pesan;
         kabar.style.color = "var(--buruk)";
         return;
       }
@@ -3983,14 +4024,14 @@ function viewAlat(){
       tombol.textContent = labelAsli;
 
       if(!r.ok){
-        kabar.textContent = r.mati ? "Sambungan ke Claude belum aktif." : r.pesan;
+        kabar.textContent = r.mati ? "Sambungan ke AI belum aktif." : r.pesan;
         kabar.style.color = "var(--buruk)";
         return;
       }
 
       var entri = (r.hasil && r.hasil.entri) || [];
       if(!entri.length){
-        kabar.textContent = "Claude tidak mengembalikan entri apa pun.";
+        kabar.textContent = "AI tidak mengembalikan entri apa pun.";
         kabar.style.color = "var(--buruk)";
         return;
       }
@@ -4394,10 +4435,18 @@ function bagianIsi(e){
   return p.bagian.length >= 2 ? p : null;
 }
 
-function bagianLampiran(e){
-  var daftar = lampiranEntri(e);
+/* bagian = null  -> lampiran yang tidak ditempel ke tab mana pun
+   bagian = "judul" -> hanya lampiran milik tab itu */
+function bagianLampiran(e, bagian, tanpaBingkai){
+  var semua = lampiranEntri(e);
+  var daftar = semua.filter(function(l){
+    var milik = l.bagian || "";
+    return bagian ? milik === bagian : !milik;
+  });
   if(!daftar.length) return "";
-  var h = '<section class="kotak kaca"><h2>Lampiran</h2><div class="lam-daftar">';
+  var h = tanpaBingkai
+    ? '<div class="lam-daftar lam-dalam">'
+    : '<section class="kotak kaca"><h2>Lampiran</h2><div class="lam-daftar">';
 
   function bingkai(src, judul, tautanLuar){
     var t = '<div class="lam-dok"><iframe src="' + esc(src) + '" title="' + esc(judul || "Dokumen") +
@@ -4466,7 +4515,7 @@ function bagianLampiran(e){
          '<span class="lam-buka">Unduh</span></button>';
   });
 
-  h += "</div></section>";
+  h += tanpaBingkai ? "</div>" : "</div></section>";
   return h;
 }
 
@@ -5021,6 +5070,25 @@ function selisihHari(tanggal){
   return Math.round((b - a) / 86400000);
 }
 
+var HARI_NAMA = ["Minggu","Senin","Selasa","Rabu","Kamis","Jumat","Sabtu"];
+var BULAN_NAMA = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
+
+function pecahTanggal(tgl){
+  var d = new Date(String(tgl) + "T00:00:00");
+  if(isNaN(d.getTime())) return null;
+  return {hari:HARI_NAMA[d.getDay()], tgl:d.getDate(),
+          bulan:BULAN_NAMA[d.getMonth()], tahun:d.getFullYear()};
+}
+
+/* Tanggal ditulis lengkap dengan nama harinya. "4 hari lagi" saja tidak
+   cukup: orang perlu tahu itu jatuh hari apa untuk mencocokkan dengan
+   jadwal jaga, dan pembaca layar tidak bisa menghitungnya sendiri. */
+function tanggalPanjang(tgl){
+  var p = pecahTanggal(tgl);
+  if(!p) return tgl;
+  return p.hari + ", " + p.tgl + " " + p.bulan + " " + p.tahun;
+}
+
 function labelWaktu(tanggal){
   var d = selisihHari(tanggal);
   if(isNaN(d)) return tanggal;
@@ -5050,7 +5118,7 @@ function viewJadwal(){
        (pemilik() ? ", dan sebagai pemilik kamu juga bisa mengumumkan agenda untuk semua orang." : ". Agenda bertanda \u201Cbersama\u201D diumumkan pemilik arsip.") + "</p>";
   h += '<div class="kotak-aksi"><button class="t utama" id="agTambah" type="button">+ Pengingat</button>';
   h += '<button class="t" id="agPemicu" type="button">Salin pemicu</button>';
-  h += '<button class="t" id="agTempel" type="button">Tempel dari Claude</button></div>';
+  h += '<button class="t" id="agTempel" type="button">Tempel dari AI</button></div>';
   h += "</section>";
 
   var judulKel = {lewat:"Terlewat", kini:"Hari ini", dekat:"Minggu ini", nanti:"Nanti", selesai:"Sudah selesai"};
@@ -5074,12 +5142,19 @@ function viewJadwal(){
       var j = jenisAgenda(a.jenis);
       h += '<li class="ag-item' + (a.selesai ? " ag-usai" : "") + '" style="--jw:' + j.w + '">';
       h += '<button class="ag-centang" type="button" data-ag-usai="' + esc(a.id) + '" role="checkbox" aria-checked="' +
-           (a.selesai ? "true" : "false") + '" aria-label="Tandai ' + esc(a.judul) + ' selesai">' +
+           (a.selesai ? "true" : "false") + '" aria-label="Tandai selesai: ' + esc(a.judul) + ", " +
+           esc(tanggalPanjang(a.tanggal)) + (a.jam ? " pukul " + esc(a.jam) : "") + '">' +
            (a.selesai ? "\u2713" : "") + "</button>";
+      var pt = pecahTanggal(a.tanggal);
+      var lewat = !a.selesai && selisihHari(a.tanggal) < 0;
+      h += '<div class="ag-kal' + (lewat ? " ag-kal-lewat" : "") + '" aria-hidden="true">' +
+           "<b>" + (pt ? pt.tgl : "?") + "</b><span>" + (pt ? esc(pt.bulan) : "") + "</span></div>";
       h += '<div class="ag-isi">';
       h += '<div class="ag-judul">' + esc(a.judul) + "</div>";
+      h += '<div class="ag-tanggal">' + esc(tanggalPanjang(a.tanggal)) +
+           (a.jam ? ' <span class="ag-jam">' + esc(a.jam) + "</span>" : "") +
+           ' <span class="ag-relatif' + (lewat ? " ag-telat" : "") + '">' + esc(labelWaktu(a.tanggal)) + "</span></div>";
       h += '<div class="ag-meta"><span class="ag-tag">' + esc(j.nm) + "</span>";
-      h += "<span>" + esc(labelWaktu(a.tanggal)) + (a.jam ? " \u00B7 " + esc(a.jam) : "") + "</span>";
       if(a.bersama) h += '<span class="ag-tag ag-bersama">bersama</span>';
       if(a.tugasan){
         if(a.punyaku){
@@ -5548,7 +5623,7 @@ function viewBerkas(){
   h += '<p style="color:var(--redup);font-size:14px;margin:10px 0 0;max-width:62ch">Syarat berkas tiap stase, dipisah per rumah sakit. Seluruhnya milik akunmu sendiri \u2014 daftar maupun centangnya tidak terlihat oleh siapa pun, termasuk pemilik arsip.</p>';
   h += '<div class="kotak-aksi"><button class="t utama" id="bkTambah" type="button">+ Berkas</button>';
   h += '<button class="t" id="bkPemicu" type="button">Salin pemicu</button>';
-  h += '<button class="t" id="bkTempel" type="button">Tempel dari Claude</button></div>';
+  h += '<button class="t" id="bkTempel" type="button">Tempel dari AI</button></div>';
 
   if(stasePakai.length){
     h += '<div class="ct-saring">';
@@ -5591,7 +5666,9 @@ function viewBerkas(){
 
     h += '<section class="kotak kaca">';
     h += '<div class="bk-kepala"><h2>' + esc(nama) + "</h2>";
-    h += '<span class="bk-hitung' + (usai === punya.length ? " bk-kelar" : "") + '">' + usai + " / " + punya.length + "</span></div>";
+    h += '<span class="bk-kanan">';
+    h += '<button class="t kcl" type="button" data-bk-namai="' + esc(nama) + '">Ganti nama</button>';
+    h += '<span class="bk-hitung' + (usai === punya.length ? " bk-kelar" : "") + '">' + usai + " / " + punya.length + "</span></span></div>";
     h += '<div class="bk-bilah"><span style="width:' + pct + '%"></span></div>';
     h += '<ul class="bk-daftar">';
     punya.forEach(function(b){
@@ -5693,7 +5770,7 @@ function bacaJsonTempel(teks){
 }
 
 async function tempelBerkas(){
-  var teks = await mintaTeks("Tempel checklist dari Claude", "JSON hasil Claude",
+  var teks = await mintaTeks("Tempel checklist dari AI", "JSON hasil AI",
     {banyakBaris:true, ok:"Masukkan",
      placeholder:'[{"judul":"Logbook tindakan","stase":"ipd","rs":"RSUP Sardjito","catatan":"min. 10 tindakan"}]'});
   if(teks === null) return;
@@ -5721,7 +5798,7 @@ async function tempelBerkas(){
 }
 
 async function tempelJadwal(){
-  var teks = await mintaTeks("Tempel jadwal dari Claude", "JSON hasil Claude",
+  var teks = await mintaTeks("Tempel jadwal dari AI", "JSON hasil AI",
     {banyakBaris:true, ok:"Masukkan",
      placeholder:'[{"judul":"Jaga malam IGD","tanggal":"2026-08-20","jam":"19:00","jenis":"jaga"}]'});
   if(teks === null) return;
@@ -5767,6 +5844,30 @@ function pasangBerkas(){
       if(m[id]) delete m[id]; else m[id] = true;
       simpanPribadi();
       render();
+    });
+  });
+
+  Array.prototype.forEach.call(panggung.querySelectorAll("[data-bk-namai]"), function(b){
+    b.addEventListener("click", async function(){
+      var lama = b.dataset.bkNamai;
+      var baru = await mintaTeks("Ganti nama rumah sakit", "Nama baru",
+        {nilai: lama === "Tanpa rumah sakit" ? "" : lama, ok:"Ganti",
+         pesan:"Semua berkas di kelompok ini ikut berpindah.",
+         placeholder:"mis. RSUP Dr. Sardjito"});
+      if(baru === null) return;
+      baru = baru.trim();
+      // Nama kosong berarti kembali ke kelompok tanpa rumah sakit.
+      var jadi = baru;
+      var kena = 0;
+      daftarBerkas().forEach(function(x){
+        if((x.rs || "Tanpa rumah sakit") !== lama) return;
+        x.rs = jadi;
+        kena++;
+      });
+      if(!kena) return;
+      simpanPribadi();
+      render();
+      toast(kena + " berkas dipindahkan ke " + (jadi || "tanpa rumah sakit") + ".");
     });
   });
 

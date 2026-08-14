@@ -248,7 +248,8 @@ function bersihEntri(e, akun) {
         judul: String(l.judul || "").slice(0, 200),
         url: String(l.url || "").slice(0, 2000),
         mime: String(l.mime || "").slice(0, 100),
-        ukuran: Number(l.ukuran) || 0
+        ukuran: Number(l.ukuran) || 0,
+        bagian: String(l.bagian || "").slice(0, 200)
       };
     }) : [],
     isi: String(e.isi || ""),
