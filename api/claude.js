@@ -550,6 +550,9 @@ module.exports = async function handler(req, res) {
       penyedia: PENYEDIA || "(belum ada kunci API)",
       model: PENYEDIA === "gemini" ? MODEL_GEMINI : MODEL,
       kunciApi: PENYEDIA ? "terpasang" : "TIDAK ADA",
+      // Vercel mengisi variabel ini sendiri. Tanpa penanda begini, "sudah
+      // ter-deploy atau belum" cuma bisa ditebak dari ada-tidaknya fitur.
+      versi: (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7) || "(tidak diketahui)",
       penyimpanan: (URL_KV && TOKEN_KV) ? "terpasang" : "TIDAK ADA (KV_REST_API_URL)",
       masukGoogle: process.env.GOOGLE_CLIENT_ID
         ? "aktif"
