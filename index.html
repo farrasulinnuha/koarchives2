@@ -4959,6 +4959,43 @@ async function simpanImpor(hasil){
    12a. Tampilan pribadi tiap akun
    ===================================================================== */
 
+function pasangProfil(){
+  var bs = document.getElementById("pfSimpan");
+  if(!bs) return;
+  bs.addEventListener("click", async function(){
+    var kabar = document.getElementById("pfKabar");
+    function v(id){ return document.getElementById(id).value.trim(); }
+    if(!v("pfNama")){ kabar.textContent = "Nama panggilan belum diisi."; kabar.style.color = "var(--buruk)"; return; }
+    bs.disabled = true; kabar.textContent = "Menyimpan\u2026"; kabar.style.color = "var(--redup)";
+    var j = await srv("profilSimpan", {
+      nama:v("pfNama"), universitas:v("pfUniv"), angkatan:v("pfAngkatan"), grup:v("pfGrup"),
+      nim:v("pfNim"), staseKini:v("pfStase"), rsKini:v("pfRs"), telepon:v("pfTelepon"),
+      bio:document.getElementById("pfBio").value.trim()
+    });
+    bs.disabled = false;
+    if(j.galat){ kabar.textContent = j.galat; kabar.style.color = "var(--buruk)"; return; }
+    if(j.akun) pasangAkunServer(j.akun);
+    // Daftar teman ikut basi karena nama dan grup bisa berubah.
+    DAFTAR_AKUN = null;
+    kabar.textContent = "Tersimpan.";
+    kabar.style.color = "var(--baik)";
+    toast("Profil diperbarui.");
+  });
+
+  var bp = document.getElementById("pfSandi");
+  if(bp) bp.addEventListener("click", async function(){
+    var lama = await mintaTeks("Ganti sandi", "Sandi sekarang", {rahasia:true, ok:"Lanjut"});
+    if(lama === null) return;
+    var baru = await mintaTeks("Ganti sandi", "Sandi baru",
+      {rahasia:true, ok:"Simpan", pesan:"Minimal 8 karakter."});
+    if(baru === null) return;
+    if(baru.length < 8) return beritahu("Terlalu pendek", "Sandi baru minimal 8 karakter.");
+    var j = await srv("gantiSandi", {lama:lama, baru:baru});
+    if(j.galat) return beritahu("Gagal", j.galat);
+    toast("Sandi diganti.");
+  });
+}
+
 function viewTampilan(){
   var h = bilahAtas();
   h += '<section class="lembar kaca"><h1 class="judul-besar">Tampilan</h1>';
@@ -5023,6 +5060,7 @@ function viewTampilan(){
 
   panggung.innerHTML = h;
   pasangCari();
+  pasangProfil();
   if(!bisaTulis()) pasangKlarifikasi();
 
   var berkas = document.getElementById("latarBerkas");
@@ -6550,6 +6588,13 @@ function viewAtur(){
 
   // --- akun di server: dikelola sendiri, tanpa menerbitkan ulang situs ---
   if(SERVER.ada){
+    h += '<section class="kotak kaca"><h2>Permintaan pemulihan sandi</h2>';
+    h += "<p>Orang yang lupa sandinya mengajukan lewat layar masuk. Buatkan kodenya di sini, lalu sampaikan kode itu lewat WhatsApp atau langsung \u2014 berlaku 24 jam dan sekali pakai.</p>";
+    h += '<div class="kotak-aksi"><button class="t" id="resetMuat" type="button">Lihat permintaan</button>';
+    h += '<span id="resetKabar" class="bantu" style="align-self:center"></span></div>';
+    h += '<div id="resetDaftar" style="margin-top:12px"></div>';
+    h += "</section>";
+
     h += '<section class="kotak kaca"><h2>Pendaftaran mandiri</h2>';
     h += "<p>Kalau dibuka, siapa pun bisa membuat akun sendiri dari layar masuk. Akun baru selalu jadi <b>pengakses tingkat publik</b> \u2014 hanya bisa membaca materi gratis. Naikkan aksesnya lewat daftar akun di bawah setelah orangnya membayar.</p>";
     h += '<label class="pilih-baris" style="margin-top:12px"><input type="checkbox" id="aturDaftar"' +
@@ -6903,6 +6948,45 @@ async function dorongAtur(){
 
 function pasangAtur(){
   if(SERVER.ada) pasangAkunServerUi();
+
+  var rm = document.getElementById("resetMuat");
+  if(rm) rm.addEventListener("click", async function(){
+    var kotak = document.getElementById("resetDaftar");
+    var kabar = document.getElementById("resetKabar");
+    kabar.textContent = "Memuat\u2026";
+    var j = await srv("resetAntre", {});
+    kabar.textContent = "";
+    if(j.galat){ kabar.textContent = j.galat; return; }
+    var antre = j.antre || [];
+    if(!antre.length){
+      kotak.innerHTML = '<p class="bantu" style="margin:0">Tidak ada permintaan.</p>';
+      return;
+    }
+    kotak.innerHTML = antre.map(function(x){
+      return '<div class="uji-baris"><span class="uji-nama">' + esc(x.pengguna) + "</span>" +
+             '<span class="uji-nilai" style="font-weight:600;color:var(--redup)">' +
+             esc(String(x.pada || "").slice(0, 10)) + "</span>" +
+             '<button class="t kcl" type="button" data-reset-buat="' + esc(x.pengguna) + '">Buat kode</button>' +
+             '<button class="t kcl" type="button" data-reset-batal="' + esc(x.pengguna) + '">Abaikan</button></div>';
+    }).join("");
+
+    Array.prototype.forEach.call(kotak.querySelectorAll("[data-reset-buat]"), function(b){
+      b.addEventListener("click", async function(){
+        var jk = await srv("resetBuat", {pengguna:b.dataset.resetBuat});
+        if(jk.galat) return beritahu("Gagal", jk.galat);
+        await beritahu("Kode untuk " + jk.pengguna,
+          jk.kode + "\n\nBerlaku " + jk.berlaku + " dan sekali pakai. Sampaikan lewat jalur pribadi, jangan di grup.");
+        salin(jk.kode, "Kode disalin.");
+      });
+    });
+    Array.prototype.forEach.call(kotak.querySelectorAll("[data-reset-batal]"), function(b){
+      b.addEventListener("click", async function(){
+        var jb = await srv("resetBatal", {pengguna:b.dataset.resetBatal});
+        if(jb.galat) return toast(jb.galat);
+        rm.click();
+      });
+    });
+  });
 
   var swDaftar = document.getElementById("aturDaftar");
   if(swDaftar) swDaftar.addEventListener("change", async function(){
@@ -7485,6 +7569,60 @@ function layarKunci(pesanAwal){
     toast("Menampilkan materi gratis.");
   });
 
+  document.getElementById("klupa").addEventListener("click", async function(){
+    var pilih = await dialog({
+      judul:"Lupa sandi", jenis:"borang", ok:"Lanjut",
+      isi:'<p class="dialog-pesan" style="margin:0 0 10px">Pemulihan sandi di sini lewat pemilik arsip, bukan email. Ajukan dulu, lalu minta kodenya ke pemilik.</p>' +
+          '<label class="pilih-baris"><input type="radio" name="lupaMode" value="minta" checked> Ajukan permintaan</label>' +
+          '<label class="pilih-baris"><input type="radio" name="lupaMode" value="kode"> Saya sudah punya kode</label>',
+      ambil: function(){
+        var r = document.querySelector('input[name="lupaMode"]:checked');
+        return {nilai:{mode: r ? r.value : "minta"}};
+      }
+    });
+    if(!pilih) return;
+
+    if(pilih.mode === "minta"){
+      var siapa = await mintaTeks("Ajukan pemulihan", "Nama penggunamu",
+        {ok:"Ajukan", placeholder:"mis. bagas"});
+      if(siapa === null || !siapa.trim()) return;
+      var jm = await srv("resetMinta", {pengguna:siapa.trim()});
+      // Jawabannya sengaja sama saja ada atau tidak akunnya, jadi tidak
+      // bisa dipakai menebak siapa yang terdaftar.
+      await beritahu("Permintaan dicatat",
+        (jm.pesan || "Permintaan dicatat.") + " Setelah pemilik memberi kodenya, kembali ke sini dan pilih \u201CSaya sudah punya kode\u201D.");
+      return;
+    }
+
+    var n = await dialog({
+      judul:"Pakai kode pemulihan", jenis:"borang", ok:"Simpan sandi baru",
+      isi:'<label class="dl">Kode dari pemilik</label>' +
+          '<input id="lpKode" type="text" autocapitalize="characters" spellcheck="false" placeholder="8 huruf/angka">' +
+          '<label class="dl">Sandi baru</label>' +
+          '<input id="lpSandi" type="password" autocomplete="new-password" placeholder="minimal 8 karakter">',
+      ambil: function(){
+        var k = document.getElementById("lpKode").value.trim();
+        var sd = document.getElementById("lpSandi").value;
+        if(!k) return {galat:"Kodenya belum diisi."};
+        if(sd.length < 8) return {galat:"Sandi baru minimal 8 karakter."};
+        return {nilai:{kode:k, sandi:sd}};
+      }
+    });
+    if(!n) return;
+    var jp = await srv("resetPakai", n);
+    if(jp.galat) return beritahu("Gagal", jp.galat);
+    setToken(jp.token);
+    pasangAkunServer(jp.akun);
+    pasangArsipServer(jp.arsip);
+    pribadi = (jp.pribadi && typeof jp.pribadi === "object") ? jp.pribadi : pribadiKosong();
+    DAFTAR_AKUN = null;
+    g.remove();
+    document.querySelector(".app").style.display = "";
+    terapkanTema();
+    render();
+    toast("Sandi diganti. Selamat datang kembali.");
+  });
+
   document.getElementById("kform").addEventListener("submit", async function(ev){
     ev.preventDefault();
     var galat = document.getElementById("kgalat");
@@ -7754,6 +7892,7 @@ function layarMasuk(pesanAwal){
       '<input id="ksandi" type="password" autocomplete="current-password"></div>' +
       '<div class="gerbang-galat" id="kgalat" role="alert">' + esc(pesanAwal || "") + "</div>" +
       '<div class="kotak-aksi"><button class="t utama" type="submit" id="kbuka">Masuk</button></div>' +
+      '<p style="font-size:12px;margin:14px 0 0"><button type="button" class="tautan-teks" id="klupa">Lupa sandi?</button></p>' +
       '<p id="kalih" style="font-size:12px;color:var(--redup);margin:16px 0 0;line-height:1.5">Belum punya akun? Hubungi pemilik arsip.</p>' +
     "</form>";
   document.body.appendChild(g);

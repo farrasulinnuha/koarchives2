@@ -91,7 +91,10 @@ function akunAman(a) {
   return {
     pengguna: a.pengguna, nama: a.nama, peran: a.peran,
     tingkat: a.tingkat, exp: a.exp || "", aktif: a.aktif !== false,
-    ai: a.ai === true, dibuat: a.dibuat || "", mandiri: a.mandiri === true
+    ai: a.ai === true, dibuat: a.dibuat || "", mandiri: a.mandiri === true,
+    universitas: a.universitas || "", angkatan: a.angkatan || "", grup: a.grup || "",
+    nim: a.nim || "", staseKini: a.staseKini || "", rsKini: a.rsKini || "",
+    telepon: a.telepon || "", bio: a.bio || ""
   };
 }
 
@@ -308,6 +311,56 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    /* ---- lupa sandi ----
+       Tanpa layanan email, pemulihan dijembatani pemilik: pemakai mengajukan,
+       pemilik membuat kode sekali pakai, lalu menyampaikannya lewat jalur
+       yang sudah mereka pakai sehari-hari. */
+    if (aksi === "resetMinta") {
+      var pm = normalPengguna(b.pengguna);
+      var adaAkunReset = pm ? await bacaAkun(pm) : null;
+      // Jawaban selalu sama, ada atau tidak akunnya, supaya tidak jadi cara
+      // menebak nama pengguna siapa saja yang terdaftar.
+      if (adaAkunReset) {
+        var antre = await ambil("reset:antre", []);
+        if (!Array.isArray(antre)) antre = [];
+        if (antre.filter(function (x) { return x.pengguna === pm; }).length === 0) {
+          antre.push({ pengguna: pm, pada: new Date().toISOString() });
+          await simpan("reset:antre", antre.slice(-200));
+        }
+      }
+      return res.status(200).json({
+        status: "diterima",
+        pesan: "Permintaan dicatat. Hubungi pemilik arsip untuk menerima kode pemulihan."
+      });
+    }
+
+    if (aksi === "resetPakai") {
+      var kode = String(b.kode || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+      var sandiBaru = String(b.sandi || "");
+      if (!kode) return res.status(400).json({ galat: "Kodenya belum diisi." });
+      if (sandiBaru.length < 8) return res.status(400).json({ galat: "Sandi baru minimal 8 karakter." });
+
+      var milik = await redis(["GET", "reset:kode:" + kode]);
+      if (!milik) return res.status(400).json({ galat: "Kode tidak berlaku atau sudah kedaluwarsa." });
+      var akunReset = await bacaAkun(milik);
+      if (!akunReset) return res.status(400).json({ galat: "Akunnya sudah tidak ada." });
+
+      akunReset.garam = acakHex(16);
+      akunReset.hash = olahSandi(sandiBaru, akunReset.garam);
+      await tulisAkun(akunReset);
+      // Kode sekali pakai, dan antreannya dibersihkan sekalian.
+      await redis(["DEL", "reset:kode:" + kode]);
+      var sisaAntre = (await ambil("reset:antre", [])).filter(function (x) { return x.pengguna !== milik; });
+      await simpan("reset:antre", sisaAntre);
+
+      var tokenReset = await buatSesi(milik);
+      return res.status(200).json({
+        token: tokenReset, akun: akunAman(akunReset),
+        arsip: saringUntuk(await bacaArsip(), akunReset),
+        pribadi: await ambil("pribadi:" + milik, null)
+      });
+    }
+
     /* ---- daftar sendiri ----
        Sengaja tanpa token: ini justru jalannya orang yang belum punya akun.
        Akun hasil pendaftaran SELALU pengakses bertingkat publik, apa pun
@@ -486,7 +539,11 @@ module.exports = async function handler(req, res) {
         var ar = await bacaAkun(namaR[ri]);
         // Hanya nama panggilan dan nama pengguna. Peran, tingkat akses,
         // dan masa berlaku bukan urusan sesama pemakai.
-        if (ar && ar.aktif !== false) ringkas.push({ pengguna: ar.pengguna, nama: ar.nama || ar.pengguna });
+        if (ar && ar.aktif !== false) {
+          // Grup ikut dibuka karena berguna saat menugaskan jadwal; sisa
+          // profil (NIM, telepon, universitas) tetap tidak dibagikan.
+          ringkas.push({ pengguna: ar.pengguna, nama: ar.nama || ar.pengguna, grup: ar.grup || "" });
+        }
       }
       return res.status(200).json({ akun: ringkas });
     }
@@ -541,6 +598,49 @@ module.exports = async function handler(req, res) {
       var sisaH = daftarH.filter(function (x) { return x.id !== idH; });
       await simpan("agenda:tugasan", sisaH);
       return res.status(200).json({ status: "dihapus", tugasan: tugasanUntuk(sisaH, akun) });
+    }
+
+    /* ---- profil akun sendiri ---- */
+    if (aksi === "profilSimpan") {
+      var pr = akun;
+      pr.nama = String(b.nama || pr.nama || pr.pengguna).slice(0, 120);
+      pr.universitas = String(b.universitas || "").slice(0, 160);
+      pr.angkatan = String(b.angkatan || "").slice(0, 20);
+      pr.grup = String(b.grup || "").slice(0, 80);
+      pr.nim = String(b.nim || "").slice(0, 40);
+      pr.staseKini = String(b.staseKini || "").slice(0, 80);
+      pr.rsKini = String(b.rsKini || "").slice(0, 120);
+      pr.telepon = String(b.telepon || "").slice(0, 40);
+      pr.bio = String(b.bio || "").slice(0, 400);
+      await tulisAkun(pr);
+      return res.status(200).json({ status: "tersimpan", akun: akunAman(pr) });
+    }
+
+    /* ---- pemulihan sandi: sisi pemilik ---- */
+    if (aksi === "resetAntre") {
+      if (akun.peran !== "pemilik") return res.status(403).json({ galat: "Hanya pemilik." });
+      return res.status(200).json({ antre: await ambil("reset:antre", []) });
+    }
+
+    if (aksi === "resetBuat") {
+      if (akun.peran !== "pemilik") return res.status(403).json({ galat: "Hanya pemilik." });
+      var sasaran = normalPengguna(b.pengguna);
+      if (!(await bacaAkun(sasaran))) return res.status(404).json({ galat: "Akun tidak ditemukan." });
+      // Tanpa huruf/angka yang mudah tertukar saat dibacakan (0/O, 1/I).
+      var abjad = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      var kodeBaru = "";
+      var acak = crypto.randomBytes(8);
+      for (var ki = 0; ki < 8; ki++) kodeBaru += abjad[acak[ki] % abjad.length];
+      await redis(["SET", "reset:kode:" + kodeBaru, sasaran, "EX", "86400"]);
+      return res.status(200).json({ kode: kodeBaru, pengguna: sasaran, berlaku: "24 jam" });
+    }
+
+    if (aksi === "resetBatal") {
+      if (akun.peran !== "pemilik") return res.status(403).json({ galat: "Hanya pemilik." });
+      var buang = normalPengguna(b.pengguna);
+      var sisa = (await ambil("reset:antre", [])).filter(function (x) { return x.pengguna !== buang; });
+      await simpan("reset:antre", sisa);
+      return res.status(200).json({ antre: sisa });
     }
 
     /* ---- lampiran berkas ----
