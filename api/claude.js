@@ -228,7 +228,25 @@ var SKEMA_OCR = {
   additionalProperties: false
 };
 
+var SKEMA_RAPI = {
+  type: "object",
+  properties: { isi: { type: "string" }, catatan: { type: "string" } },
+  required: ["isi"],
+  additionalProperties: false
+};
+
 var TUGAS = {
+  rapikan: {
+    sistem: DASAR + "\n\nRapikan catatan markdown yang diberikan sesuai permintaan " +
+      "penulisnya. ATURAN KERAS: jangan menambah fakta, angka, dosis, atau klaim " +
+      "medis yang tidak ada di teks asli, dan jangan membuang informasi. Yang boleh " +
+      "kamu ubah hanya susunan, penomoran, ejaan, tanda baca, dan format markdown " +
+      "(## judul, daftar, **tebal**, tabel pipa). Kalau ada bagian yang tampak keliru " +
+      "atau bertentangan, JANGAN diperbaiki diam-diam \u2014 biarkan apa adanya lalu " +
+      "sebutkan di \"catatan\". Kembalikan seluruh teks hasil rapian di \"isi\", " +
+      "bukan potongan atau ringkasan.",
+    skema: SKEMA_RAPI
+  },
   ocr: {
     sistem: DASAR + "\n\nSalin SELURUH teks yang terbaca pada gambar atau dokumen " +
       "yang dilampirkan, apa adanya, tanpa merangkum dan tanpa menambah apa pun. " +

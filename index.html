@@ -975,6 +975,26 @@ body.berlatar .butir{opacity:.25}
 .uji-nilai{flex:1;min-width:0;font-weight:700;word-break:break-word}
 .uji-baik{color:var(--baik)}
 .uji-buruk{color:var(--buruk)}
+.format-b.format-ai{background:linear-gradient(120deg,var(--a1),var(--a3));color:var(--atas-aksen);
+  border-color:transparent;padding:0 13px}
+.format-b.format-ai:hover{filter:brightness(1.07);background:linear-gradient(120deg,var(--a1),var(--a3))}
+.format-b.format-ai:disabled{opacity:.6;cursor:default}
+.kaya{min-height:230px;padding:14px 16px;border-radius:13px;border:1px solid var(--garis);
+  background:rgba(var(--kaca),.65);color:var(--tinta);font:400 15px/1.7 var(--f-teks);overflow-wrap:break-word}
+.kaya:focus{outline:2px solid var(--a2);outline-offset:1px}
+.kaya>*:first-child{margin-top:0}
+.kaya>*:last-child{margin-bottom:0}
+.kaya h2,.kaya h3,.kaya h4{font-family:var(--f-tampil);letter-spacing:-.02em;margin:18px 0 8px}
+.kaya h2{font-size:20px}.kaya h3{font-size:17px}.kaya h4{font-size:15.5px}
+.kaya p{margin:0 0 11px}
+.kaya ul,.kaya ol{margin:0 0 11px;padding-left:22px}
+.kaya li{margin:3px 0}
+.kaya blockquote{margin:0 0 11px;padding:6px 14px;border-left:3px solid var(--a2);color:var(--redup)}
+.kaya code{padding:1px 5px;border-radius:5px;background:var(--garis);font-size:.92em}
+.kaya pre{padding:11px 13px;border-radius:10px;background:var(--garis);overflow-x:auto}
+.kaya table{width:100%;border-collapse:collapse;margin:0 0 11px}
+.kaya th,.kaya td{border:1px solid var(--garis);padding:6px 9px;text-align:left}
+.bag-kaya{min-height:150px}
 .format-bar{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-bottom:8px}
 .format-b{min-width:36px;height:34px;padding:0 10px;border-radius:9px;cursor:pointer;
   border:1px solid var(--garis);background:rgba(var(--kaca),.65);color:var(--tinta);
@@ -3334,6 +3354,107 @@ var FORMAT_TOMBOL = [
   {k:"kutip",  nm:"\u201C", jd:"Kutipan",      awalan:"> "}
 ];
 
+/* ---- Penyunting terformat (WYSIWYG) ----
+   Bentuk simpanannya tetap markdown; yang berubah hanya cara menulisnya.
+   Jadi entri lama tetap terbaca dan tidak ada migrasi data. */
+
+function mdTeksSebaris(n){
+  var keluar = "";
+  Array.prototype.forEach.call(n.childNodes, function(c){
+    if(c.nodeType === 3){ keluar += c.nodeValue.replace(/\s+/g, " "); return; }
+    if(c.nodeType !== 1) return;
+    var t = c.tagName;
+    var dalam = mdTeksSebaris(c);
+    if(t === "BR"){ keluar += "\n"; return; }
+    if(!dalam.trim() && t !== "BR") return;
+    if(t === "B" || t === "STRONG") keluar += "**" + dalam.trim() + "**";
+    else if(t === "I" || t === "EM") keluar += "*" + dalam.trim() + "*";
+    else if(t === "CODE") keluar += "`" + dalam.trim() + "`";
+    else if(t === "A"){
+      var href = c.getAttribute("href") || "";
+      keluar += href ? "[" + dalam.trim() + "](" + href + ")" : dalam;
+    }
+    else keluar += dalam;
+  });
+  return keluar;
+}
+
+function htmlKeMd(akar){
+  var bagian = [];
+  Array.prototype.forEach.call(akar.childNodes, function(n){
+    if(n.nodeType === 3){
+      var t = n.nodeValue.trim();
+      if(t) bagian.push(t);
+      return;
+    }
+    if(n.nodeType !== 1) return;
+    var tag = n.tagName;
+    if(/^H[1-6]$/.test(tag)){
+      var tingkat = Math.min(Math.max(Number(tag[1]), 2), 4);
+      bagian.push(new Array(tingkat + 1).join("#") + " " + mdTeksSebaris(n).trim());
+    }
+    else if(tag === "UL" || tag === "OL"){
+      var baris = [];
+      Array.prototype.forEach.call(n.children, function(li, i){
+        if(li.tagName !== "LI") return;
+        baris.push((tag === "OL" ? (i + 1) + ". " : "- ") + mdTeksSebaris(li).trim());
+      });
+      if(baris.length) bagian.push(baris.join("\n"));
+    }
+    else if(tag === "BLOCKQUOTE"){
+      var q = htmlKeMd(n).split("\n").map(function(x){ return x ? "> " + x : ">"; });
+      bagian.push(q.join("\n"));
+    }
+    else if(tag === "TABLE"){
+      // Tabel pipa dipertahankan; tanpa ini isi tabel entri lama hilang
+      // begitu disunting di mode terformat.
+      var baris2 = [];
+      var kepalaSudah = false;
+      Array.prototype.forEach.call(n.querySelectorAll("tr"), function(tr){
+        var sel = Array.prototype.map.call(tr.children, function(td){
+          return mdTeksSebaris(td).trim().replace(/\|/g, "\\|");
+        });
+        if(!sel.length) return;
+        baris2.push("| " + sel.join(" | ") + " |");
+        if(!kepalaSudah){
+          baris2.push("| " + sel.map(function(){ return "---"; }).join(" | ") + " |");
+          kepalaSudah = true;
+        }
+      });
+      if(baris2.length) bagian.push(baris2.join("\n"));
+    }
+    else if(tag === "PRE") bagian.push("```\n" + n.textContent.replace(/\s+$/, "") + "\n```");
+    else if(tag === "HR") bagian.push("---");
+    else if(tag === "DIV" && n.querySelector("p,h2,h3,ul,ol,table,blockquote")) bagian.push(htmlKeMd(n));
+    else {
+      var isi = mdTeksSebaris(n).trim();
+      if(isi) bagian.push(isi);
+    }
+  });
+  return bagian.filter(Boolean).join("\n\n");
+}
+
+/* Menyambungkan satu textarea markdown dengan satu kotak terformat.
+   Textarea-nya tetap ada (tersembunyi) sebagai sumber kebenaran. */
+function pasangKaya(ta, kotak){
+  function keKotak(){ kotak.innerHTML = md(ta.value) || "<p><br></p>"; }
+  function keTeks(){
+    ta.value = htmlKeMd(kotak);
+    ta.dispatchEvent(new Event("input", {bubbles:true}));
+  }
+  keKotak();
+  kotak.addEventListener("input", keTeks);
+  kotak.addEventListener("blur", keTeks);
+  // Tempel sebagai teks polos, supaya gaya dari Word atau web tidak ikut
+  // terbawa dan merusak keluaran markdown-nya.
+  kotak.addEventListener("paste", function(ev){
+    ev.preventDefault();
+    var teks = (ev.clipboardData || window.clipboardData).getData("text/plain");
+    document.execCommand("insertText", false, teks);
+  });
+  return {segarkan:keKotak, panen:keTeks};
+}
+
 function bilahFormat(){
   var h = '<div class="format-bar" role="toolbar" aria-label="Format tulisan">';
   FORMAT_TOMBOL.forEach(function(t){
@@ -3341,13 +3462,34 @@ function bilahFormat(){
          '" title="' + esc(t.jd) + '" aria-label="' + esc(t.jd) + '">' + t.nm + "</button>";
   });
   h += '<span class="format-sela"></span>';
+  if(pemilik()){
+    h += '<button class="format-b format-ai" type="button" id="tulisRapikan" ' +
+         'title="Bereskan dengan AI" aria-label="Bereskan tulisan dengan AI">Bereskan</button>';
+  }
+  h += '<button class="format-b" type="button" id="tulisSumber" aria-pressed="false" ' +
+       'title="Lihat markdown mentah" aria-label="Tampilkan sumber markdown">Sumber</button>';
   h += '<button class="format-b" type="button" id="tulisLuas" aria-pressed="false" ' +
        'title="Layar fokus" aria-label="Perbesar layar tulis">Fokus</button>';
   h += "</div>";
   return h;
 }
 
+var PERINTAH_KAYA = {
+  tebal:["bold"], miring:["italic"], daftar:["insertUnorderedList"],
+  nomor:["insertOrderedList"], judul:["formatBlock","<h3>"],
+  kutip:["formatBlock","<blockquote>"], kode:["formatBlock","<pre>"]
+};
+
 function terapkanFormat(ta, kunci){
+  // Di mode terformat, yang disunting kotaknya \u2014 markdown-nya menyusul.
+  if(ta && ta.isContentEditable){
+    var p = PERINTAH_KAYA[kunci];
+    if(!p) return;
+    ta.focus();
+    document.execCommand(p[0], false, p[1] || null);
+    ta.dispatchEvent(new Event("input", {bubbles:true}));
+    return;
+  }
   var t = FORMAT_TOMBOL.filter(function(x){ return x.k === kunci; })[0];
   if(!ta || !t) return;
   var mulai = ta.selectionStart, akhir = ta.selectionEnd;
@@ -3455,7 +3597,8 @@ function viewEditor(){
   // fIsi tetap jadi sumber kebenaran meski mode tab menampilkan beberapa
   // kotak: semua kode lain (impor, pemilih tab lampiran, simpan) membacanya
   // dari sini, jadi tidak ada yang perlu ikut diubah.
-  h += '<textarea id="fIsi" placeholder="Tulis pakai markdown ringkas">' + esc(e.isi) + "</textarea>";
+  h += '<textarea id="fIsi" placeholder="Tulis pakai markdown ringkas" hidden>' + esc(e.isi) + "</textarea>";
+  h += '<div id="fKaya" class="kaya" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Isi entri"></div>';
   h += '<div id="tulisTab" hidden></div>';
   h += '<span class="bantu">Didukung: <code>##</code> judul, daftar, <code>**tebal**</code>, <code>*miring*</code>, <code>`kode`</code>, kutipan <code>&gt;</code>, dan tabel pipa.</span></div>';
 
@@ -3623,10 +3766,75 @@ function viewEditor(){
   var taIsi = document.getElementById("fIsi");
   var cTab = document.getElementById("fTab");
   var kotakTab = document.getElementById("tulisTab");
-  var taAktif = taIsi;
+  var kotakKaya = document.getElementById("fKaya");
+  var kayaUtama = pasangKaya(taIsi, kotakKaya);
+  var modeSumber = false;
+  var taAktif = kotakKaya;
 
   panggung.addEventListener("focusin", function(ev){
-    if(ev.target.tagName === "TEXTAREA") taAktif = ev.target;
+    if(ev.target.tagName === "TEXTAREA" || ev.target.isContentEditable) taAktif = ev.target;
+  });
+
+  var btRapi = document.getElementById("tulisRapikan");
+  if(btRapi) btRapi.addEventListener("click", async function(){
+    // Panen dulu supaya yang dikirim adalah tulisan terkini, bukan yang
+    // tersimpan sebelum suntingan terakhir.
+    if(!modeSumber && !cTab.checked) kayaUtama.panen();
+    if(cTab.checked) susunDariKotak();
+    var isiKini = taIsi.value;
+    if(!isiKini.trim()) return beritahu("Masih kosong", "Tulis dulu isinya sebelum dibereskan.");
+
+    var n = await dialog({
+      judul:"Bereskan dengan AI", jenis:"borang", ok:"Bereskan", lebar:true,
+      isi:'<p class="dialog-pesan" style="margin:0 0 10px">Perintahnya bisa kamu ubah. AI tidak boleh menambah fakta atau membuang isi \u2014 hanya merapikan susunan dan formatnya.</p>' +
+          '<label class="dl">Perintah untuk AI</label>' +
+          '<textarea id="rpPerintah" style="min-height:120px">' +
+          esc("Rapikan jadi outline belajar koas yang enak dibaca:\n" +
+              "- pecah jadi bagian ber-## sesuai alur klinis (definisi, patofisiologi, diagnosis, tatalaksana)\n" +
+              "- ubah paragraf panjang jadi daftar berpoin kalau isinya memang berupa poin\n" +
+              "- tebalkan istilah dan angka yang sering ditanya penguji\n" +
+              "- rapikan ejaan dan singkatan medis, seragamkan penulisannya") + "</textarea>",
+      ambil: function(){
+        var t = document.getElementById("rpPerintah").value.trim();
+        if(!t) return {galat:"Perintahnya belum diisi."};
+        return {nilai:{perintah:t}};
+      }
+    });
+    if(!n) return;
+
+    var labelAsli = btRapi.textContent;
+    btRapi.disabled = true; btRapi.textContent = "\u2026";
+    var r = await mintaClaude("rapikan", "PERMINTAAN PENULIS:\n" + n.perintah +
+                              "\n\n---\nCATATAN YANG HARUS DIRAPIKAN:\n" + isiKini, []);
+    btRapi.disabled = false; btRapi.textContent = labelAsli;
+
+    if(!r.ok) return beritahu("Gagal", r.mati ? "Sambungan ke AI belum aktif." : r.pesan);
+    var baru = (r.hasil && r.hasil.isi) || "";
+    if(!baru.trim()) return beritahu("Kosong", "AI tidak mengembalikan tulisan apa pun.");
+
+    var ok = await tanya("Ganti dengan hasil rapian?",
+      (r.hasil.catatan ? "Catatan AI: " + r.hasil.catatan + "\n\n" : "") +
+      "Panjang semula " + isiKini.length + " karakter, hasilnya " + baru.length +
+      " karakter. Periksa lagi setelah diganti \u2014 kamu masih bisa membatalkan dengan tidak menyimpan entrinya.",
+      {ok:"Ganti"});
+    if(!ok) return;
+
+    taIsi.value = baru;
+    kayaUtama.segarkan();
+    segarkanDaftarTab();
+    modeTulis();
+    gambarLamSunting();
+    toast("Sudah dirapikan. Periksa dulu sebelum disimpan.");
+  });
+
+  var btSumber = document.getElementById("tulisSumber");
+  if(btSumber) btSumber.addEventListener("click", function(){
+    modeSumber = !modeSumber;
+    if(!modeSumber) kayaUtama.segarkan();       // markdown yang disunting tangan -> tampilan
+    else kayaUtama.panen();                     // tampilan -> markdown sebelum diperlihatkan
+    btSumber.setAttribute("aria-pressed", modeSumber ? "true" : "false");
+    btSumber.textContent = modeSumber ? "Tampilan" : "Sumber";
+    modeTulis();
   });
 
   Array.prototype.forEach.call(panggung.querySelectorAll("[data-format]"), function(b){
@@ -3683,12 +3891,17 @@ function viewEditor(){
            (i === p.bagian.length - 1 ? " disabled" : "") + ' aria-label="Turunkan tab ' + (i + 1) + '">\u2193</button>';
       h += '<button class="t kcl" type="button" data-bag-buang="' + i + '" aria-label="Hapus tab ' + (i + 1) + '">Hapus</button>';
       h += "</div>";
-      h += '<textarea class="bag-isi" placeholder="Isi tab ini" aria-label="Isi tab ' + (i + 1) + '">' +
-           esc(bg.isi) + "</textarea></div>";
+      h += '<textarea class="bag-isi" aria-label="Sumber tab ' + (i + 1) + '" hidden>' +
+           esc(bg.isi) + "</textarea>";
+      h += '<div class="kaya bag-kaya" contenteditable="true" role="textbox" aria-multiline="true" ' +
+           'aria-label="Isi tab ' + (i + 1) + '"></div></div>';
     });
     h += '<button class="t" type="button" id="bagTambah">+ Tab baru</button>';
     kotakTab.innerHTML = h;
 
+    Array.prototype.forEach.call(kotakTab.querySelectorAll(".bag-kartu"), function(kartu){
+      pasangKaya(kartu.querySelector(".bag-isi"), kartu.querySelector(".bag-kaya"));
+    });
     Array.prototype.forEach.call(kotakTab.querySelectorAll("textarea, .bag-judul"), function(el){
       el.addEventListener("input", susunDariKotak);
     });
@@ -3731,10 +3944,15 @@ function viewEditor(){
 
   function modeTulis(){
     var pakai = cTab.checked;
-    taIsi.hidden = pakai;
     kotakTab.hidden = !pakai;
-    if(pakai){ gambarKotakTab(); taAktif = kotakTab.querySelector("textarea") || taIsi; }
-    else { taAktif = taIsi; }
+    taIsi.hidden = pakai || !modeSumber;
+    kotakKaya.hidden = pakai || modeSumber;
+    if(pakai){
+      gambarKotakTab();
+      taAktif = kotakTab.querySelector("[contenteditable], textarea") || taIsi;
+    } else {
+      taAktif = modeSumber ? taIsi : kotakKaya;
+    }
   }
 
   function segarkanDaftarTab(){
