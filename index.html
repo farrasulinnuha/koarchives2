@@ -2972,7 +2972,12 @@ function viewArsip(){
   var list = entriTersaring();
   var st = ui.stase === "semua" ? null : cariStase(ui.stase);
   var tampak = entriTampak();
-  var jmlSoal = tampak.reduce(function(a,e){ return a + ((e.soal||[]).length); }, 0);
+  // Entri terkunci ikut dihitung penuh lewat jumlahSoal, supaya angka di
+  // akun gratis sama persis dengan yang dilihat akun berbayar \u2014 justru
+  // angka itulah yang menunjukkan seberapa banyak isinya.
+  var jmlSoal = tampak.reduce(function(a, e){
+    return a + (e.terkunci ? (e.jumlahSoal || 0) : (e.soal || []).length);
+  }, 0);
   var jmlKuis = tampak.filter(function(e){ return e.tipe === "kuis"; }).length;
 
   var h = bilahAtas();
@@ -3055,10 +3060,14 @@ function kartu(e, i){
   h += "<h3>" + esc(e.judul) + "</h3>";
   // Entri terkunci memakai cuplikan yang sudah dipotong server; isinya
   // sendiri memang tidak ikut dikirim, jadi jangan menghitung dari situ.
+  var nSoalKartu = e.terkunci ? (e.jumlahSoal || 0) : (e.soal || []).length;
+  var cadanganCuplik = e.tipe === "kuis" && nSoalKartu ? nSoalKartu + " soal latihan" : "";
   var cuplikKartu = e.terkunci
-    ? (e.cuplikan ? e.cuplikan + "\u2026" : (e.jumlahSoal || 0) + " soal latihan")
-    : ringkas(e.isi || ((e.soal || []).length + " soal latihan"), 150);
-  h += '<p class="cuplik">' + esc(cuplikKartu) + "</p>";
+    ? (e.cuplikan ? e.cuplikan + "\u2026" : cadanganCuplik)
+    : ringkas(e.isi || cadanganCuplik, 150);
+  // Baris cuplikan dilewati kalau memang tidak ada yang bisa ditulis,
+  // daripada memunculkan "0 soal latihan" yang bikin isinya terlihat kosong.
+  if(cuplikKartu) h += '<p class="cuplik">' + esc(cuplikKartu) + "</p>";
   if((e.tag || []).length){
     h += '<div class="tag-baris">';
     e.tag.slice(0,3).forEach(function(t){ h += '<span class="tag">' + esc(t) + "</span>"; });
@@ -3067,10 +3076,10 @@ function kartu(e, i){
   h += '<div class="kartu-kaki">';
   if(e.tanggal) h += "<span>" + esc(tgl(e.tanggal)) + "</span>";
   if(e.terkunci) h += '<span class="kartu-kunci">' + IKON.gembok + "Terkunci</span>";
-  // Jumlah soalnya disamakan dengan yang dilihat akun penuh, supaya pembaca
-  // tahu persis seberapa banyak isinya \u2014 itu justru daya tariknya.
+  // Hanya entri kuis yang menyebut jumlah soal. Outline dan materi tidak
+  // punya soal, jadi menuliskannya cuma menyesatkan.
   var nSoal = e.terkunci ? (e.jumlahSoal || 0) : (e.soal || []).length;
-  if(nSoal) h += "<span>" + nSoal + " soal</span>";
+  if(e.tipe === "kuis" && nSoal) h += "<span>" + nSoal + " soal</span>";
   if(sk) h += '<span class="skor">' + sk.terbaik + "/" + sk.dari + "</span>";
   h += "</div></article>";
   return h;
@@ -3178,7 +3187,7 @@ function viewDetail(){
     if(e.cuplikan) h += '<p class="kunci-cuplikan">\u201C' + esc(e.cuplikan) + "\u2026\u201D</p>";
     h += '<div class="kunci-angka">';
     h += '<span><b>' + esc(labelTipe(e.tipe)) + "</b>Jenis</span>";
-    if(nSoalK) h += "<span><b>" + nSoalK + "</b>Soal latihan</span>";
+    if(e.tipe === "kuis" && nSoalK) h += "<span><b>" + nSoalK + "</b>Soal latihan</span>";
     h += "<span><b>" + esc(cariStase(e.stase).kode) + "</b>Stase</span>";
     h += "</div>";
     h += "<p>" + esc(T("ajakanKunci")) + "</p>";
