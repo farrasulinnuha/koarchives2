@@ -786,6 +786,11 @@ module.exports = async function handler(req, res) {
        Terbuka untuk semua peran: menjadwalkan jaga bersama teman bukan
        tindakan menulis arsip, jadi pengakses pun boleh. */
     if (aksi === "akunRingkas") {
+      // Daftar nama pemakai lain hanya untuk yang mengelola konten. Pembaca
+      // \u2014 termasuk yang berbayar \u2014 tidak perlu tahu siapa saja anggotanya.
+      if (akun.peran !== "pemilik" && akun.peran !== "kontributor") {
+        return res.status(403).json({ galat: "Akun ini tidak berhak melihat daftar akun." });
+      }
       var namaR = await daftarPengguna();
       var ringkas = [];
       for (var ri = 0; ri < namaR.length; ri++) {
@@ -803,8 +808,8 @@ module.exports = async function handler(req, res) {
 
     if (aksi === "agendaTugas") {
       // Ditegakkan di server juga, bukan cuma disembunyikan di tampilan.
-      if (akun.tingkat !== "penuh" && akun.peran !== "pemilik") {
-        return res.status(403).json({ galat: "Akun tingkat publik belum bisa menugaskan pengingat ke orang lain." });
+      if (akun.peran !== "pemilik" && akun.peran !== "kontributor") {
+        return res.status(403).json({ galat: "Hanya pemilik dan kontributor yang bisa menugaskan pengingat." });
       }
       var masukT = b.agenda || {};
       if (!String(masukT.judul || "").trim()) {

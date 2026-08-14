@@ -1127,6 +1127,8 @@ input[type=file]{width:100%;padding:10px;border-radius:11px;border:1px dashed va
   font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--redup)}
 .kunci-angka b{font-family:var(--f-tampil);font-size:18px;letter-spacing:-.02em;
   text-transform:none;color:var(--tinta)}
+.saring-akses{margin-top:-6px}
+.saring-akses .pil b{font-weight:800}
 .kartu-kunci{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:100px;
   background:var(--tunggu-latar);color:var(--tunggu);font-weight:800;font-size:11.5px}
 .kunci-kotak{text-align:center}
@@ -2486,7 +2488,7 @@ function soalKeTeks(list){
    6. Peran
    ===================================================================== */
 
-var ui = {view:"arsip", stase:"semua", tipe:"semua", cari:"", entriId:null, kuis:null,
+var ui = {view:"arsip", stase:"semua", tipe:"semua", akses:"semua", cari:"", entriId:null, kuis:null,
           catatanStase:null, catatanCari:"", tab:0, tabEntri:null, berkasStase:null};
 var sunting = null;
 
@@ -2560,6 +2562,7 @@ function entriTersaring(){
   return entriTampak().filter(function(e){
     if(ui.stase !== "semua" && e.stase !== ui.stase) return false;
     if(ui.tipe !== "semua" && e.tipe !== ui.tipe) return false;
+    if(ui.akses !== "semua" && e.akses !== ui.akses) return false;
     if(!q) return true;
     var hay = [e.judul, e.isi, e.sumber, (e.tag||[]).join(" ")];
     (e.soal || []).forEach(function(s){ hay.push(s.q, s.penjelasan, (s.opsi||[]).join(" ")); });
@@ -3011,6 +3014,22 @@ function viewArsip(){
   });
   h += "</div>";
 
+  // Saringan gratis/berbayar berlaku untuk semua peran: pembaca memakainya
+  // untuk melihat apa yang bisa dibuka, pemilik untuk memeriksa apa yang
+  // sudah dikunci dan apa yang masih terbuka.
+  var jmlGratis = tampak.filter(function(e){ return e.akses === "publik"; }).length;
+  var jmlBayar = tampak.length - jmlGratis;
+  if(jmlGratis && jmlBayar){
+    h += '<div class="saring saring-akses">';
+    [["semua","Semua", tampak.length], ["publik","Gratis", jmlGratis], ["terbatas","Berbayar", jmlBayar]]
+      .forEach(function(t){
+        h += '<button class="pil" type="button" data-akses="' + t[0] + '" aria-pressed="' +
+             (ui.akses === t[0] ? "true" : "false") + '">' + esc(t[1]) +
+             ' <b style="opacity:.55">' + t[2] + "</b></button>";
+      });
+    h += "</div>";
+  }
+
   if(!list.length){
     h += '<div class="sepi-kotak"><b>' + esc(ui.cari ? "Tidak ada yang cocok" : T("kosongJudul")) + "</b><span>" +
          esc(ui.cari ? 'Coba kata kunci lain untuk "' + ui.cari + '".' : T("kosongIsi")) + "</span></div>";
@@ -3026,8 +3045,11 @@ function viewArsip(){
   panggung.innerHTML = h;
   pasangCari();
 
-  Array.prototype.forEach.call(panggung.querySelectorAll(".pil"), function(b){
+  Array.prototype.forEach.call(panggung.querySelectorAll("[data-tipe]"), function(b){
     b.addEventListener("click", function(){ ui.tipe = b.dataset.tipe; render(); });
+  });
+  Array.prototype.forEach.call(panggung.querySelectorAll("[data-akses]"), function(b){
+    b.addEventListener("click", function(){ ui.akses = b.dataset.akses; render(); });
   });
   Array.prototype.forEach.call(panggung.querySelectorAll(".cincin"), function(b){
     b.addEventListener("click", function(){ ui.stase = b.dataset.id; render(); });
@@ -6227,7 +6249,8 @@ async function formAgenda(awal){
   var a = awal || {judul:"", tanggal:hariIni(), jam:"", jenis:"jaga", catatan:"", bersama:false, untuk:[]};
   // Akun tingkat publik tidak menugaskan ke orang lain: daftar temannya pun
   // tidak perlu dibuka untuk mereka.
-  var teman = penuh() || pemilik()
+  // Hanya pengelola konten yang melihat daftar nama; pembaca tidak.
+  var teman = bisaTulis()
     ? (await muatDaftarAkun()).filter(function(x){ return x.pengguna !== penggunaAkun(); })
     : [];
   var dipilih = a.untuk || [];
