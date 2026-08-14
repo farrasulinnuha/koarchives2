@@ -41,7 +41,9 @@ var KUNCI_GEMINI = process.env.GEMINI_API_KEY ||
    kalau sedang penuh atau tidak ada, turun ke berikutnya. Ini jalan keluar
    untuk model populer yang sering kena batas permintaan. */
 function daftarModel(nilai, bawaan) {
-  var d = String(nilai || bawaan).split(",")
+  // Dipisah koma, titik koma, baris baru, atau spasi \u2014 orang menempelkan
+  // daftar dengan bermacam cara dan semuanya masuk akal.
+  var d = String(nilai || bawaan).split(/[,;\n\r\t ]+/)
     .map(function (x) { return x.trim(); })
     .filter(Boolean);
   return d.length ? d : [bawaan];
@@ -581,6 +583,42 @@ module.exports = async function handler(req, res) {
 
     if (PENYEDIA && lap.izinAi === "ya") {
       lap.urutanCoba = urutanCoba().map(function (c) { return c.model; }).join("  \u2192  ");
+    }
+
+    /* Menguji tiap model satu per satu. Menguji yang pertama saja membuat
+       daftar cadangan tidak bisa dipastikan benar sampai betul-betul
+       dibutuhkan \u2014 justru saat sedang buru-buru. */
+    if (PENYEDIA && lap.izinAi === "ya") {
+      var semuaCalon = urutanCoba();
+      var hasilTiap = [];
+      for (var mi = 0; mi < semuaCalon.length && mi < 6; mi++) {
+        var cal = semuaCalon[mi];
+        try {
+          if (cal.penyedia === "gemini") {
+            var rm = await fetch(
+              "https://generativelanguage.googleapis.com/v1beta/models/" +
+                encodeURIComponent(cal.model) + ":generateContent",
+              { method: "POST",
+                headers: { "x-goog-api-key": KUNCI_GEMINI, "content-type": "application/json" },
+                body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "ok" }] }] }) });
+            var jm = await rm.json();
+            hasilTiap.push(cal.model + " \u2014 " + (rm.ok ? "BISA DIPAKAI"
+              : "gagal " + rm.status + ": " + ((jm.error && jm.error.message) || "").slice(0, 90)));
+          } else {
+            var ra = await fetch("https://api.anthropic.com/v1/messages", {
+              method: "POST",
+              headers: { "x-api-key": KUNCI_API, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+              body: JSON.stringify({ model: cal.model, max_tokens: 16, messages: [{ role: "user", content: "ok" }] })
+            });
+            var ja = await ra.json();
+            hasilTiap.push(cal.model + " \u2014 " + (ra.ok ? "BISA DIPAKAI"
+              : "gagal " + ra.status + ": " + ((ja.error && ja.error.message) || "").slice(0, 90)));
+          }
+        } catch (e) {
+          hasilTiap.push(cal.model + " \u2014 gagal: " + String(e.message || e).slice(0, 90));
+        }
+      }
+      lap.tiapModel = hasilTiap;
     }
     if (PENYEDIA && lap.izinAi === "ya") {
       try {

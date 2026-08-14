@@ -4704,6 +4704,19 @@ function viewAlat(){
               '<span class="uji-nilai' + (buruk ? " uji-buruk" : baik ? " uji-baik" : "") + '">' +
               esc(v) + "</span></div>";
     });
+    // Hasil per model: yang mana hidup, yang mana ditolak dan kenapa.
+    var tm = j.laporan.tiapModel;
+    if(Array.isArray(tm) && tm.length){
+      html += '<div class="uji-baris" style="flex-direction:column;align-items:stretch">';
+      html += '<span class="uji-nama" style="min-width:0;margin-bottom:8px">Hasil uji tiap model</span>';
+      tm.forEach(function(baris){
+        var bisa = /BISA DIPAKAI/.test(baris);
+        html += '<div style="padding:5px 0;font-size:13px;font-weight:700;color:' +
+                (bisa ? "var(--baik)" : "var(--buruk)") + '">' + esc(baris) + "</div>";
+      });
+      html += "</div>";
+    }
+
     // Kalau modelnya ditolak, daftar yang benar-benar tersedia untuk kunci
     // ini jauh lebih berguna daripada tebakan nama model.
     var mt = j.laporan.modelTersedia;
