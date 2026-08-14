@@ -1133,6 +1133,9 @@ input[type=file]{width:100%;padding:10px;border-radius:11px;border:1px dashed va
 .ag-kal-tautan{display:inline-block;margin-top:8px;font-size:12.5px;font-weight:800;
   color:var(--redup);text-decoration:none;border-bottom:1px dashed var(--garis)}
 .ag-kal-tautan:hover{color:var(--a2)}
+.gabung-daftar{display:flex;flex-direction:column;gap:6px;max-height:230px;overflow:auto;margin-top:4px}
+.gabung-pil{border-radius:11px;justify-content:flex-start}
+.geser{min-width:30px;padding:0 8px;font-size:14px;line-height:1}
 .ag-urgen{background:var(--buruk);color:#fff}
 .ag-item-urgen{border-color:var(--buruk);background:var(--buruk-latar)}
 .ag-kal{flex:none;width:52px;padding:7px 0 8px;border-radius:12px;text-align:center;
@@ -2599,6 +2602,57 @@ function skorSaya(){
 /* Catatan pribadi ikut ember `pribadi` tiap akun. Ember itu hanya
    dikembalikan server kepada pemiliknya sendiri, jadi pemilik arsip pun
    tidak bisa membacanya. Jangan pernah memindahkannya ke `db`. */
+/* Urutan pilihan sendiri, disimpan per akun. Yang belum pernah digeser
+   tetap memakai urutan bawaan, jadi menyalakan mode ini tidak mengacak
+   apa pun sampai kamu benar-benar menggeser sesuatu. */
+function urutanku(kunci){
+  if(!pribadi[kunci] || typeof pribadi[kunci] !== "object") pribadi[kunci] = {};
+  return pribadi[kunci];
+}
+function pakaiUrutanku(kunci){ return pribadi[kunci + "Aktif"] === true; }
+function setUrutanku(kunci, nyala){ pribadi[kunci + "Aktif"] = nyala === true; simpanPribadi(); }
+
+function susunManual(daftar, kunci){
+  var pos = urutanku(kunci);
+  var maks = daftar.length;
+  return daftar.slice().sort(function(a, b){
+    var pa = pos[a.id] === undefined ? maks : pos[a.id];
+    var pb = pos[b.id] === undefined ? maks : pos[b.id];
+    return pa - pb;
+  });
+}
+
+/* Menggeser satu butir: seluruh urutan ditulis ulang supaya tidak ada
+   celah nomor yang bikin urutannya melompat aneh setelah beberapa kali. */
+function geserButir(daftar, kunci, id, arah){
+  var urut = susunManual(daftar, kunci);
+  var i = -1;
+  urut.forEach(function(x, n){ if(x.id === id) i = n; });
+  var j = i + arah;
+  if(i < 0 || j < 0 || j >= urut.length) return false;
+  var t = urut[i]; urut[i] = urut[j]; urut[j] = t;
+  var pos = urutanku(kunci);
+  urut.forEach(function(x, n){ pos[x.id] = n; });
+  simpanPribadi();
+  return true;
+}
+
+function tombolGeser(kunci, id, pertama, terakhir){
+  return '<button class="t kcl geser" type="button" data-geser="' + esc(kunci) + '" data-id="' + esc(id) +
+    '" data-arah="-1"' + (pertama ? " disabled" : "") + ' aria-label="Naikkan">\u2191</button>' +
+    '<button class="t kcl geser" type="button" data-geser="' + esc(kunci) + '" data-id="' + esc(id) +
+    '" data-arah="1"' + (terakhir ? " disabled" : "") + ' aria-label="Turunkan">\u2193</button>';
+}
+
+function pasangGeser(daftarUntuk){
+  Array.prototype.forEach.call(panggung.querySelectorAll("[data-geser]"), function(b){
+    b.addEventListener("click", function(){
+      var kunci = b.dataset.geser;
+      if(geserButir(daftarUntuk(kunci), kunci, b.dataset.id, Number(b.dataset.arah))) render();
+    });
+  });
+}
+
 function berkasSelesai(){
   if(!pribadi.berkasSelesai || typeof pribadi.berkasSelesai !== "object") pribadi.berkasSelesai = {};
   return pribadi.berkasSelesai;
@@ -3042,6 +3096,11 @@ function viewDetail(){
   if(bisaTulis() && (e.isi || "").trim().length > 200){
     h += '<button class="t ai-t" id="buatKuisAi" type="button">Buat kuis dengan AI</button>';
   }
+  if(bisaTulis() && !e.terkunci && entriTampak().filter(function(x){
+      return x.id !== e.id && !x.terkunci && (x.isi || "").trim();
+    }).length){
+    h += '<button class="t" id="gabungEntri" type="button">Gabung jadi tab</button>';
+  }
   if(bisaTulis() && (e.soal || []).length >= 2){
     h += '<button class="t ai-t" id="buatBahasAi" type="button">Outline pembahasan</button>';
   }
@@ -3146,6 +3205,104 @@ function viewDetail(){
     kabar.style.color = "var(--baik)";
     setTimeout(function(){ ui.view = "arsip"; render(); window.scrollTo(0,0); }, 1100);
   }
+
+  var bGabung = document.getElementById("gabungEntri");
+  if(bGabung) bGabung.addEventListener("click", async function(){
+    var calon = entriTampak().filter(function(x){
+      return x.id !== e.id && !x.terkunci && (x.isi || "").trim();
+    }).sort(function(a, b){ return a.judul < b.judul ? -1 : 1; });
+
+    var pilih = await dialog({
+      judul:"Gabung jadi tab", jenis:"borang", ok:"Gabungkan", lebar:true,
+      isi:'<p class="dialog-pesan" style="margin:0 0 10px">Isi entri yang kamu centang akan dipindahkan ke dalam entri ini sebagai tab tersendiri. Lampiran dan soalnya ikut pindah.</p>' +
+          '<div class="gabung-daftar">' +
+          calon.map(function(x){
+            return '<label class="ag-orang gabung-pil"><input type="checkbox" class="gbEntri" value="' +
+              esc(x.id) + '"> ' + esc(x.judul) + " <span style=\"opacity:.6\">\u00B7 " +
+              esc(cariStase(x.stase).kode) + "</span></label>";
+          }).join("") + "</div>" +
+          '<label class="ag-umum"><input id="gbHapus" type="checkbox"> Hapus entri asalnya setelah digabung</label>',
+      ambil: function(){
+        var id = Array.prototype.map.call(document.querySelectorAll(".gbEntri:checked"), function(c){ return c.value; });
+        if(!id.length) return {galat:"Pilih dulu entri yang mau digabung."};
+        return {nilai:{id:id, hapus:document.getElementById("gbHapus").checked}};
+      }
+    });
+    if(!pilih) return;
+
+    /* Entri ini sendiri jadi tab pertama kalau isinya belum dipecah, supaya
+       tulisan aslinya tidak hilang tertimpa tab-tab baru. */
+    var pecahDiri = pecahBagian(e.isi || "");
+    var isiBaru = pecahDiri.bagian.length
+      ? (e.isi || "").replace(/\s+$/, "")
+      : (pecahDiri.pengantar.trim()
+          ? "## " + e.judul + "\n" + pecahDiri.pengantar.trim()
+          : "");
+
+    var lampiranBaru = lampiranEntri(e).slice();
+    var soalBaru = (e.soal || []).slice();
+    var ikut = [];
+
+    pilih.id.forEach(function(id){
+      var x = cariEntri(id);
+      if(!x) return;
+      ikut.push(x);
+      var p = pecahBagian(x.isi || "");
+      // Entri yang sudah bertab dipertahankan susunannya, jadi tab-tabnya
+      // masuk apa adanya alih-alih ditumpuk jadi satu.
+      if(p.bagian.length){
+        if(p.pengantar.trim()) isiBaru += "\n\n## " + x.judul + "\n" + p.pengantar.trim();
+        p.bagian.forEach(function(bg){
+          isiBaru += "\n\n## " + bg.judul + "\n" + bg.isi;
+        });
+      } else {
+        isiBaru += "\n\n## " + x.judul + "\n" + (x.isi || "").trim();
+      }
+      lampiranEntri(x).forEach(function(l){
+        var salin = Object.assign({}, l);
+        if(!salin.bagian) salin.bagian = x.judul;
+        lampiranBaru.push(salin);
+      });
+      (x.soal || []).forEach(function(sl){ soalBaru.push(sl); });
+    });
+
+    if(!ikut.length) return;
+
+    var obj = Object.assign({}, e, {
+      isi: isiBaru.replace(/^\s+/, ""),
+      tab: true,
+      lampiran: lampiranBaru,
+      soal: soalBaru,
+      tipe: soalBaru.length && e.tipe !== "kuis" ? e.tipe : e.tipe
+    });
+
+    if(SERVER.ada){
+      var js = await srv("entriSimpan", {entri:[obj]});
+      if(js.galat) return toast(js.galat);
+      if(js.arsip) pasangArsipServer(js.arsip);
+    } else {
+      for(var i = 0; i < db.entri.length; i++){ if(db.entri[i].id === obj.id) db.entri[i] = obj; }
+      simpan();
+    }
+
+    if(pilih.hapus){
+      for(var k = 0; k < ikut.length; k++){
+        if(SERVER.ada){
+          var jh = await srv("entriHapus", {id:ikut[k].id});
+          if(jh.galat){ toast(jh.galat); break; }
+          if(jh.arsip) pasangArsipServer(jh.arsip);
+        } else {
+          db.entri = db.entri.filter(function(x){ return x.id !== ikut[k].id; });
+          simpan();
+        }
+      }
+    }
+
+    ui.tabEntri = null;
+    render();
+    window.scrollTo(0,0);
+    toast(ikut.length + " entri digabung jadi tab." + (pilih.hapus ? " Entri asalnya dihapus." : ""));
+  });
 
   var bKuisAi = document.getElementById("buatKuisAi");
   if(bKuisAi) bKuisAi.addEventListener("click", function(){
@@ -5897,7 +6054,9 @@ function viewJadwal(){
        (pemilik() ? ", dan sebagai pemilik kamu juga bisa mengumumkan agenda untuk semua orang." : ". Agenda bertanda \u201Cbersama\u201D diumumkan pemilik arsip.") + "</p>";
   h += '<div class="kotak-aksi"><button class="t utama" id="agTambah" type="button">+ Pengingat</button>';
   h += '<button class="t" id="agPemicu" type="button">Salin pemicu</button>';
-  h += '<button class="t" id="agTempel" type="button">Tempel dari AI</button></div>';
+  h += '<button class="t" id="agTempel" type="button">Tempel dari AI</button>';
+  h += '<label class="pilih-baris" style="margin-left:auto"><input type="checkbox" id="agUrut"' +
+       (pakaiUrutanku("urutJadwal") ? " checked" : "") + "> Urutkan sendiri</label></div>";
   h += "</section>";
 
   var judulKel = {lewat:"Terlewat", kini:"Hari ini", dekat:"Minggu ini", nanti:"Nanti", selesai:"Sudah selesai"};
@@ -5914,10 +6073,13 @@ function viewJadwal(){
   urutKel.forEach(function(k){
     var isi = ember[k];
     if(!isi.length) return;
+    // Urutan sendiri berlaku di dalam tiap kelompok, jadi yang terlewat dan
+    // yang hari ini tetap tidak tertukar tempatnya.
+    if(pakaiUrutanku("urutJadwal")) isi = susunManual(isi, "urutJadwal");
     h += '<section class="kotak kaca"><h2>' + judulKel[k] +
          ' <span class="ag-jml">' + isi.length + "</span></h2>";
     h += '<ul class="ag-daftar">';
-    isi.forEach(function(a){
+    isi.forEach(function(a, n){
       var j = jenisAgenda(a.jenis);
       h += '<li class="ag-item' + (a.selesai ? " ag-usai" : "") +
            (a.urgen && !a.selesai ? " ag-item-urgen" : "") + '" style="--jw:' +
@@ -5963,6 +6125,7 @@ function viewJadwal(){
       // salinannya selalu jadi milik pribadi si penyalin, bukan ikut
       // disebar ulang ke orang yang sama.
       h += '<div class="ag-aksi">';
+      if(pakaiUrutanku("urutJadwal")) h += tombolGeser("urutJadwal", a.id, n === 0, n === isi.length - 1);
       h += '<button class="t kcl" type="button" data-ag-salin="' + esc(a.id) + '">Duplikat</button>';
       if(bolehUbah){
         h += '<button class="t kcl" type="button" data-ag-ubah="' + esc(a.id) + '">Ubah</button>';
@@ -6058,6 +6221,10 @@ async function formAgenda(awal){
 }
 
 function pasangJadwal(){
+  var swJ = document.getElementById("agUrut");
+  if(swJ) swJ.addEventListener("change", function(){ setUrutanku("urutJadwal", swJ.checked); render(); });
+  pasangGeser(function(){ return jadwalGabung(); });
+
   var ap = document.getElementById("agPemicu");
   if(ap) ap.addEventListener("click", function(){ salin(promptJadwal(), "Pemicu jadwal disalin."); });
   var at = document.getElementById("agTempel");
@@ -6421,7 +6588,9 @@ function viewBerkas(){
   h += '<p style="color:var(--redup);font-size:14px;margin:10px 0 0;max-width:62ch">Syarat berkas tiap stase, dipisah per rumah sakit. Seluruhnya milik akunmu sendiri \u2014 daftar maupun centangnya tidak terlihat oleh siapa pun, termasuk pemilik arsip.</p>';
   h += '<div class="kotak-aksi"><button class="t utama" id="bkTambah" type="button">+ Berkas</button>';
   h += '<button class="t" id="bkPemicu" type="button">Salin pemicu</button>';
-  h += '<button class="t" id="bkTempel" type="button">Tempel dari AI</button></div>';
+  h += '<button class="t" id="bkTempel" type="button">Tempel dari AI</button>';
+  h += '<label class="pilih-baris" style="margin-left:auto"><input type="checkbox" id="bkUrut"' +
+       (pakaiUrutanku("urutBerkas") ? " checked" : "") + "> Urutkan sendiri</label></div>";
 
   if(stasePakai.length){
     h += '<div class="ct-saring">';
@@ -6459,6 +6628,7 @@ function viewBerkas(){
 
   rs.forEach(function(nama){
     var punya = isiStase.filter(function(b){ return (b.rs || "Tanpa rumah sakit") === nama; });
+    if(pakaiUrutanku("urutBerkas")) punya = susunManual(punya, "urutBerkas");
     var usai = punya.filter(function(b){ return berkasSelesai()[b.id]; }).length;
     var pct = punya.length ? Math.round(usai / punya.length * 100) : 0;
 
@@ -6469,7 +6639,7 @@ function viewBerkas(){
     h += '<span class="bk-hitung' + (usai === punya.length ? " bk-kelar" : "") + '">' + usai + " / " + punya.length + "</span></span></div>";
     h += '<div class="bk-bilah"><span style="width:' + pct + '%"></span></div>';
     h += '<ul class="bk-daftar">';
-    punya.forEach(function(b){
+    punya.forEach(function(b, n){
       var ok = berkasSelesai()[b.id] === true;
       h += '<li class="bk-item' + (ok ? " bk-usai" : "") + '">';
       h += '<button class="ag-centang" type="button" data-bk-usai="' + esc(b.id) + '" role="checkbox" aria-checked="' +
@@ -6477,7 +6647,9 @@ function viewBerkas(){
       h += '<div class="ag-isi"><div class="ag-judul">' + esc(b.judul) + "</div>";
       if(b.catatan) h += '<div class="ag-catatan">' + esc(b.catatan) + "</div>";
       h += "</div>";
-      h += '<div class="ag-aksi"><button class="t kcl" type="button" data-bk-salin="' + esc(b.id) + '">Duplikat</button>';
+      h += '<div class="ag-aksi">';
+      if(pakaiUrutanku("urutBerkas")) h += tombolGeser("urutBerkas", b.id, n === 0, n === punya.length - 1);
+      h += '<button class="t kcl" type="button" data-bk-salin="' + esc(b.id) + '">Duplikat</button>';
       h += '<button class="t kcl" type="button" data-bk-ubah="' + esc(b.id) + '">Ubah</button>';
       h += '<button class="t kcl" type="button" data-bk-hapus="' + esc(b.id) + '">Hapus</button></div>';
       h += "</li>";
@@ -6626,6 +6798,10 @@ async function tempelJadwal(){
 }
 
 function pasangBerkas(){
+  var swB = document.getElementById("bkUrut");
+  if(swB) swB.addEventListener("change", function(){ setUrutanku("urutBerkas", swB.checked); render(); });
+  pasangGeser(function(){ return daftarBerkas(); });
+
   var bp = document.getElementById("bkPemicu");
   if(bp) bp.addEventListener("click", function(){ salin(promptBerkas(), "Pemicu checklist disalin."); });
   var bt = document.getElementById("bkTempel");
