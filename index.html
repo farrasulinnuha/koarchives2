@@ -4688,7 +4688,8 @@ function viewAlat(){
     }
     var nama = {penyedia:"Penyedia AI", model:"Model utama", urutanCoba:"Urutan cadangan",
                 kunciApi:"Kunci API", penyimpanan:"Penyimpanan (Redis)", sesi:"Sesi login",
-                izinAi:"Izin AI akun ini", panggilanUji:"Panggilan uji ke server AI"};
+                izinAi:"Izin AI akun ini", panggilanUji:"Panggilan uji ke server AI",
+                masukGoogle:"Masuk dengan Google", masukSso:"Masuk dengan SSO"};
     var html = "";
     Object.keys(nama).forEach(function(k){
       if(j.laporan[k] === undefined) return;
@@ -8019,7 +8020,12 @@ function layarKunci(pesanAwal){
      supaya tidak ada tombol yang pasti gagal ditekan. */
   (async function(){
     var kotak = document.getElementById("kluar");
-    if(!kotak || (!MASUK_LUAR.google && !MASUK_LUAR.sso)) return;
+    if(!kotak) return;
+    if(!MASUK_LUAR.google && !MASUK_LUAR.sso){
+      // Dulu di sini cuma disisakan celah kosong tanpa keterangan apa pun.
+      kotak.style.margin = "0";
+      return;
+    }
     kotak.innerHTML = '<div class="masuk-pisah"><span>atau</span></div>';
 
     if(MASUK_LUAR.sso){

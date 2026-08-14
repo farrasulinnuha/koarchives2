@@ -551,6 +551,12 @@ module.exports = async function handler(req, res) {
       model: PENYEDIA === "gemini" ? MODEL_GEMINI : MODEL,
       kunciApi: PENYEDIA ? "terpasang" : "TIDAK ADA",
       penyimpanan: (URL_KV && TOKEN_KV) ? "terpasang" : "TIDAK ADA (KV_REST_API_URL)",
+      masukGoogle: process.env.GOOGLE_CLIENT_ID
+        ? "aktif"
+        : "TIDAK AKTIF \u2014 isi GOOGLE_CLIENT_ID di Vercel lalu deploy ulang",
+      masukSso: process.env.SSO_CAS_URL
+        ? "aktif (" + process.env.SSO_CAS_URL + ")"
+        : "TIDAK AKTIF \u2014 isi SSO_CAS_URL kalau kampusmu memakai CAS",
       sesi: "belum diperiksa",
       izinAi: "belum diperiksa",
       panggilanUji: "belum diperiksa"
