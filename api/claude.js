@@ -228,6 +228,61 @@ var SKEMA_OCR = {
   additionalProperties: false
 };
 
+/* Model kerap membalas notasi matematika LaTeX yang tidak dirender di sini
+   dan malah tampil sebagai deretan tanda dolar. Dilarang lewat pemicunya,
+   lalu tetap dibersihkan lagi di bawah kalau ternyata lolos juga. */
+var ATURAN_FORMAT = [
+  "",
+  "",
+  "ATURAN PENULISAN (wajib):",
+  "- JANGAN memakai LaTeX atau notasi matematika sama sekali. Dilarang keras membungkus",
+  "  apa pun dengan $...$, \\(...\\), atau \\[...\\], dan dilarang menulis perintah seperti",
+  "  \\ge, \\le, \\pm, \\times, \\rightarrow, \\frac, atau \\text.",
+  "- Tulis lambangnya langsung: ≥ ≤ ± × → µ, atau pakai kata (\"minimal\", \"kurang dari\").",
+  "  Contoh benar: \"MoCA-INA normal ≥ 28\"; \"HIS ≤ 4 mengarah ke Alzheimer\".",
+  "- Rentang dan simpangan ditulis biasa: \"22,9 ± 6,6\"; \"7-10 hari\".",
+  "- Pakai markdown saja: ## dan ### untuk judul, - untuk daftar, **tebal** untuk istilah",
+  "  dan angka penting, tabel pipa untuk data berkolom.",
+  "- Sub-poin dijorokkan DUA spasi di depan tanda hubungnya supaya bertingkat rapi:",
+  "    - Antikoagulan",
+  "      - Heparin: 80 unit/kg bolus",
+  "      - Enoksaparin: 1 mg/kg tiap 12 jam",
+  "- Jangan menulis kalimat pengantar seperti \"Berikut hasilnya\"; langsung isinya saja."
+].join("\n");
+
+var GANTI_LATEX = [
+  [/\\(?:ge|geq)(?![a-zA-Z])/g, "≥"], [/\\(?:le|leq)(?![a-zA-Z])/g, "≤"],
+  [/\\pm(?![a-zA-Z])/g, "±"], [/\\times(?![a-zA-Z])/g, "×"], [/\\div(?![a-zA-Z])/g, "÷"],
+  [/\\(?:rightarrow|to)(?![a-zA-Z])/g, "→"], [/\\approx(?![a-zA-Z])/g, "≈"],
+  [/\\neq(?![a-zA-Z])/g, "≠"], [/\\mu(?![a-zA-Z])/g, "µ"], [/\\alpha(?![a-zA-Z])/g, "α"],
+  [/\\beta(?![a-zA-Z])/g, "β"], [/\\circ(?![a-zA-Z])/g, "°"],
+  [/\\text\{([^}]*)\}/g, "$1"], [/\\mathrm\{([^}]*)\}/g, "$1"],
+  [/\\%/g, "%"], [/\\,/g, " "]
+];
+
+function bersihLatex(teks) {
+  if (typeof teks !== "string") return teks;
+  if (teks.indexOf("$") === -1 && teks.indexOf("\\") === -1) return teks;
+  var t = teks;
+  t = t.replace(/\$\$([\s\S]*?)\$\$/g, "$1");
+  t = t.replace(/\$([^$\n]{1,150}?)\$/g, "$1");
+  t = t.replace(/\\\(([\s\S]*?)\\\)/g, "$1");
+  t = t.replace(/\\\[([\s\S]*?)\\\]/g, "$1");
+  GANTI_LATEX.forEach(function (g) { t = t.replace(g[0], g[1]); });
+  return t;
+}
+
+function bersihDalam(nilai) {
+  if (typeof nilai === "string") return bersihLatex(nilai);
+  if (Array.isArray(nilai)) return nilai.map(bersihDalam);
+  if (nilai && typeof nilai === "object") {
+    var k = {};
+    Object.keys(nilai).forEach(function (n) { k[n] = bersihDalam(nilai[n]); });
+    return k;
+  }
+  return nilai;
+}
+
 var SKEMA_RAPI = {
   type: "object",
   properties: { isi: { type: "string" }, catatan: { type: "string" } },
@@ -245,7 +300,7 @@ var TUGAS = {
       "atau bertentangan, JANGAN diperbaiki diam-diam \u2014 biarkan apa adanya lalu " +
       "sebutkan di \"catatan\". Kembalikan seluruh teks hasil rapian di \"isi\", " +
       "bukan potongan atau ringkasan.",
-    skema: SKEMA_RAPI
+    skema: SKEMA_RAPI, format: true
   },
   ocr: {
     sistem: DASAR + "\n\nSalin SELURUH teks yang terbaca pada gambar atau dokumen " +
@@ -497,6 +552,9 @@ module.exports = async function handler(req, res) {
     }
 
     var t = TUGAS[tugas];
+    // Aturan penulisan ditempel ke semua tugas, bukan disalin satu per satu
+    // ke tiap pemicu, supaya tidak ada yang terlewat saat menambah tugas.
+    var sistemPakai = t.sistem + ATURAN_FORMAT;
 
     // Lampiran: gambar (foto slide, papan tulis, halaman buku) dan PDF
     // dibaca langsung oleh model. PPT dan Word sudah diubah jadi teks di
@@ -521,7 +579,7 @@ module.exports = async function handler(req, res) {
 
       var badanG = {
         contents: [{ role: "user", parts: bagian }],
-        systemInstruction: { parts: [{ text: t.sistem }] },
+        systemInstruction: { parts: [{ text: sistemPakai }] },
         generationConfig: {
           responseMimeType: "application/json",
           responseSchema: skemaGemini(t.skema),
@@ -602,7 +660,7 @@ module.exports = async function handler(req, res) {
       var badan = {
         model: MODEL,
         max_tokens: 16000,
-        system: t.sistem,
+        system: sistemPakai,
         output_config: {
           effort: EFFORT,
           format: { type: "json_schema", schema: t.skema }
@@ -649,7 +707,7 @@ module.exports = async function handler(req, res) {
     }
 
     var hasil;
-    try { hasil = JSON.parse(teks); }
+    try { hasil = bersihDalam(JSON.parse(teks)); }
     catch (e) {
       return res.status(502).json({ galat: "Balasan " + NAMA_AI + " tidak terbaca sebagai JSON." });
     }

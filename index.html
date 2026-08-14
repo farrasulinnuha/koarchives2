@@ -2277,24 +2277,42 @@ function md(src){
       continue;
     }
 
-    if(/^\s*\d+[.)]\s+/.test(l)){
-      var ol = [];
-      while(i < lines.length && /^\s*\d+[.)]\s+/.test(lines[i])){
-        ol.push("<li>" + inline(lines[i].replace(/^\s*\d+[.)]\s+/, "")) + "</li>");
+    // Daftar bertingkat: kedalaman diambil dari spasi di depan baris, jadi
+    // sub-poin benar-benar menjorok alih-alih rata dengan induknya.
+    if(/^\s*(?:\d+[.)]|[-*+])\s+/.test(l)){
+      var awal = i;
+      var potong = [];
+      while(i < lines.length && /^\s*(?:\d+[.)]|[-*+])\s+/.test(lines[i])){
+        var spasi = (lines[i].match(/^\s*/) || [""])[0].replace(/\t/g, "    ").length;
+        var urut = /^\s*\d+[.)]\s+/.test(lines[i]);
+        potong.push({
+          dalam: Math.floor(spasi / 2),
+          urut: urut,
+          teks: lines[i].replace(/^\s*(?:\d+[.)]|[-*+])\s+/, "")
+        });
         i++;
       }
-      out.push("<ol>" + ol.join("") + "</ol>");
-      continue;
-    }
-
-    if(/^\s*[-*+]\s+/.test(l)){
-      var ul = [];
-      while(i < lines.length && /^\s*[-*+]\s+/.test(lines[i])){
-        ul.push("<li>" + inline(lines[i].replace(/^\s*[-*+]\s+/, "")) + "</li>");
-        i++;
+      if(!potong.length){ i = awal; }
+      else {
+        var html = "";
+        var tumpuk = [];
+        potong.forEach(function(butir){
+          while(tumpuk.length && butir.dalam < tumpuk[tumpuk.length - 1].dalam){
+            html += "</li></" + tumpuk.pop().tag + ">";
+          }
+          var atas = tumpuk[tumpuk.length - 1];
+          if(atas && butir.dalam === atas.dalam){
+            html += "</li><li>" + inline(butir.teks);
+          } else {
+            var tag = butir.urut ? "ol" : "ul";
+            html += "<" + tag + "><li>" + inline(butir.teks);
+            tumpuk.push({tag:tag, dalam:butir.dalam});
+          }
+        });
+        while(tumpuk.length) html += "</li></" + tumpuk.pop().tag + ">";
+        out.push(html);
+        continue;
       }
-      out.push("<ul>" + ul.join("") + "</ul>");
-      continue;
     }
 
     var pb = [];
@@ -3351,7 +3369,9 @@ var FORMAT_TOMBOL = [
   {k:"judul",  nm:"H",   jd:"Sub-judul",      awalan:"### "},
   {k:"daftar", nm:"\u2022", jd:"Daftar titik", awalan:"- "},
   {k:"nomor",  nm:"1.",  jd:"Daftar nomor",   awalan:"1. ", bernomor:true},
-  {k:"kutip",  nm:"\u201C", jd:"Kutipan",      awalan:"> "}
+  {k:"kutip",  nm:"\u201C", jd:"Kutipan",      awalan:"> "},
+  {k:"masuk",  nm:"\u2192|", jd:"Jorokkan ke dalam", awalan:"  ", polos:true},
+  {k:"keluar", nm:"|\u2190", jd:"Keluarkan",        awalan:"  ", polos:true, mundur:true}
 ];
 
 /* ---- Penyunting terformat (WYSIWYG) ----
@@ -3379,6 +3399,31 @@ function mdTeksSebaris(n){
   return keluar;
 }
 
+/* Daftar bisa bersarang; tiap tingkat dijorokkan dua spasi supaya cocok
+   dengan yang dibaca md(). Tanpa ini sub-poin gepeng jadi satu baris. */
+function daftarKeMd(daftar, dalam){
+  var urut = daftar.tagName === "OL";
+  var baris = [];
+  var n = 0;
+  Array.prototype.forEach.call(daftar.children, function(li){
+    if(li.tagName !== "LI") return;
+    n++;
+    var anak = [];
+    var sendiri = document.createElement("div");
+    Array.prototype.forEach.call(li.childNodes, function(c){
+      if(c.nodeType === 1 && (c.tagName === "UL" || c.tagName === "OL")) anak.push(c);
+      else sendiri.appendChild(c.cloneNode(true));
+    });
+    var spasi = new Array(dalam * 2 + 1).join(" ");
+    baris.push(spasi + (urut ? n + ". " : "- ") + mdTeksSebaris(sendiri).trim());
+    anak.forEach(function(a){
+      var dalamnya = daftarKeMd(a, dalam + 1);
+      if(dalamnya) baris.push(dalamnya);
+    });
+  });
+  return baris.join("\n");
+}
+
 function htmlKeMd(akar){
   var bagian = [];
   Array.prototype.forEach.call(akar.childNodes, function(n){
@@ -3394,12 +3439,8 @@ function htmlKeMd(akar){
       bagian.push(new Array(tingkat + 1).join("#") + " " + mdTeksSebaris(n).trim());
     }
     else if(tag === "UL" || tag === "OL"){
-      var baris = [];
-      Array.prototype.forEach.call(n.children, function(li, i){
-        if(li.tagName !== "LI") return;
-        baris.push((tag === "OL" ? (i + 1) + ". " : "- ") + mdTeksSebaris(li).trim());
-      });
-      if(baris.length) bagian.push(baris.join("\n"));
+      var baris = daftarKeMd(n, 0);
+      if(baris) bagian.push(baris);
     }
     else if(tag === "BLOCKQUOTE"){
       var q = htmlKeMd(n).split("\n").map(function(x){ return x ? "> " + x : ">"; });
@@ -3477,7 +3518,8 @@ function bilahFormat(){
 var PERINTAH_KAYA = {
   tebal:["bold"], miring:["italic"], daftar:["insertUnorderedList"],
   nomor:["insertOrderedList"], judul:["formatBlock","<h3>"],
-  kutip:["formatBlock","<blockquote>"], kode:["formatBlock","<pre>"]
+  kutip:["formatBlock","<blockquote>"], kode:["formatBlock","<pre>"],
+  masuk:["indent"], keluar:["outdent"]
 };
 
 function terapkanFormat(ta, kunci){
@@ -3508,6 +3550,16 @@ function terapkanFormat(ta, kunci){
       ta.value = isi.slice(0, mulai) + t.bungkus + pilih + t.bungkus + isi.slice(akhir);
       ta.setSelectionRange(mulai + t.bungkus.length, mulai + t.bungkus.length + pilih.length);
     }
+  } else if(t.polos){
+    // Menjorokkan hanya menambah atau mengurangi dua spasi di depan baris.
+    var kiriJ = isi.lastIndexOf("\n", mulai - 1) + 1;
+    var kananJ = isi.indexOf("\n", akhir);
+    if(kananJ === -1) kananJ = isi.length;
+    var olahJ = isi.slice(kiriJ, kananJ).split("\n").map(function(b){
+      return t.mundur ? b.replace(/^ {1,2}/, "") : "  " + b;
+    }).join("\n");
+    ta.value = isi.slice(0, kiriJ) + olahJ + isi.slice(kananJ);
+    ta.setSelectionRange(kiriJ, kiriJ + olahJ.length);
   } else {
     // Awalan berlaku per baris, supaya beberapa baris terpilih jadi satu daftar.
     var kiri = isi.lastIndexOf("\n", mulai - 1) + 1;
