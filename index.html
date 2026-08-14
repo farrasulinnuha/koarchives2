@@ -1110,6 +1110,23 @@ input[type=file]{width:100%;padding:10px;border-radius:11px;border:1px dashed va
   font-size:12px;font-weight:700;color:var(--redup)}
 .masuk-pisah::before,.masuk-pisah::after{content:"";flex:1;height:1px;background:var(--garis)}
 .masuk-sso{width:100%;justify-content:center}
+.kunci-lembar{position:relative;overflow:hidden;min-height:420px}
+.kunci-isi{padding:4px 2px;filter:blur(5px);opacity:.5;user-select:none;pointer-events:none}
+.palsu-judul{display:block;height:17px;border-radius:6px;margin:22px 0 14px;
+  background:linear-gradient(90deg,var(--a1),var(--a3));opacity:.55}
+.palsu-baris{display:block;height:11px;border-radius:5px;margin:9px 0;background:var(--garis)}
+.kunci-tirai{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;text-align:center;gap:4px;padding:24px;
+  background:linear-gradient(180deg,rgba(var(--kaca),.55),rgba(var(--kaca),.88) 45%);
+  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+.kunci-tirai h2{margin:0}
+.kunci-tirai p{max-width:44ch;color:var(--redup);font-size:14px}
+.kunci-angka{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin:14px 0 4px}
+.kunci-angka span{display:flex;flex-direction:column;gap:2px;padding:9px 16px;border-radius:13px;
+  border:1px solid var(--garis);background:rgba(var(--kaca),.7);
+  font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--redup)}
+.kunci-angka b{font-family:var(--f-tampil);font-size:18px;letter-spacing:-.02em;
+  text-transform:none;color:var(--tinta)}
 .kartu-kunci{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:100px;
   background:var(--tunggu-latar);color:var(--tunggu);font-weight:800;font-size:11.5px}
 .kunci-kotak{text-align:center}
@@ -1671,6 +1688,8 @@ var TEKS_BAWAAN = {
   labelKuis:"Kuis",
   labelCatatan:"Catatan",
   labelBiko:"Biko",
+  kontakAdmin:"081379605757",
+  ajakanKunci:"Materi ini bagian dari akses penuh. Hubungi admin untuk membukanya.",
   kaki:"Arsip pribadi. Jangan simpan data pasien yang bisa diidentifikasi."
 };
 
@@ -2231,6 +2250,7 @@ var IKON = {
   main:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l13 8-13 8z"/></svg>',
   catatan:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5z"/><path d="M15 3v5h5M8.5 13h7M8.5 17h4"/></svg>',
   berkas:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-3z"/><path d="m8.5 14 2 2 4-4"/></svg>',
+  gembok:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="4" y="10" width="16" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
   jadwal:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
   ipk:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
   tampilan:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="m3 14 4.5-4.5 3.5 3 3.5-3.5L21 14"/><circle cx="8.5" cy="8.5" r="1.2"/></svg>'
@@ -3033,7 +3053,12 @@ function kartu(e, i){
   if(e.status === "dikembalikan") h += '<span class="status-pil dikembalikan">Dikembalikan</span>';
   h += "</div>";
   h += "<h3>" + esc(e.judul) + "</h3>";
-  h += '<p class="cuplik">' + esc(ringkas(e.isi || ((e.soal||[]).length + " soal latihan"), 150)) + "</p>";
+  // Entri terkunci memakai cuplikan yang sudah dipotong server; isinya
+  // sendiri memang tidak ikut dikirim, jadi jangan menghitung dari situ.
+  var cuplikKartu = e.terkunci
+    ? (e.cuplikan ? e.cuplikan + "\u2026" : (e.jumlahSoal || 0) + " soal latihan")
+    : ringkas(e.isi || ((e.soal || []).length + " soal latihan"), 150);
+  h += '<p class="cuplik">' + esc(cuplikKartu) + "</p>";
   if((e.tag || []).length){
     h += '<div class="tag-baris">';
     e.tag.slice(0,3).forEach(function(t){ h += '<span class="tag">' + esc(t) + "</span>"; });
@@ -3041,9 +3066,11 @@ function kartu(e, i){
   }
   h += '<div class="kartu-kaki">';
   if(e.tanggal) h += "<span>" + esc(tgl(e.tanggal)) + "</span>";
-  if(e.terkunci) h += '<span class="kartu-kunci">Terkunci' +
-    (e.jumlahSoal ? " \u00B7 " + e.jumlahSoal + " soal" : "") + "</span>";
-  if(e.tipe === "kuis" && (e.soal||[]).length) h += "<span>" + e.soal.length + " soal</span>";
+  if(e.terkunci) h += '<span class="kartu-kunci">' + IKON.gembok + "Terkunci</span>";
+  // Jumlah soalnya disamakan dengan yang dilihat akun penuh, supaya pembaca
+  // tahu persis seberapa banyak isinya \u2014 itu justru daya tariknya.
+  var nSoal = e.terkunci ? (e.jumlahSoal || 0) : (e.soal || []).length;
+  if(nSoal) h += "<span>" + nSoal + " soal</span>";
   if(sk) h += '<span class="skor">' + sk.terbaik + "/" + sk.dari + "</span>";
   h += "</div></article>";
   return h;
@@ -3121,14 +3148,49 @@ function viewDetail(){
     : "";
 
   if(e.terkunci){
-    h += '<section class="lembar kaca kunci-kotak">';
-    h += '<div class="kunci-gembok" aria-hidden="true">' +
+    /* Halamannya sengaja dibuat menyerupai versi lengkapnya, tapi teks yang
+       diburamkan itu PLACEHOLDER, bukan tulisan aslinya. Kalau isi asli yang
+       dikirim lalu diburamkan lewat CSS, siapa pun bisa membacanya dengan
+       mematikan gaya halaman \u2014 justru membocorkan yang mau dijual. */
+    function barisPalsu(n, seed){
+      var t = "";
+      for(var i = 0; i < n; i++){
+        var lebar = 55 + ((seed * 37 + i * 53) % 42);
+        t += '<span class="palsu-baris" style="width:' + lebar + '%"></span>';
+      }
+      return t;
+    }
+    var nSoalK = e.jumlahSoal || 0;
+    var kontak = T("kontakAdmin");
+
+    h += '<section class="lembar kaca kunci-lembar">';
+    h += '<div class="kunci-isi" aria-hidden="true">';
+    for(var bagi = 0; bagi < 3; bagi++){
+      h += '<span class="palsu-judul" style="width:' + (38 + bagi * 9) + '%"></span>';
+      h += barisPalsu(bagi === 1 ? 5 : 4, bagi + 1);
+    }
+    h += "</div>";
+
+    h += '<div class="kunci-tirai">';
+    h += '<div class="kunci-gembok">' +
          '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="10" width="16" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>';
     h += "<h2>Materi ini terkunci</h2>";
-    if(e.cuplikan) h += '<p class="kunci-cuplikan">' + esc(e.cuplikan) + "\u2026</p>";
-    h += "<p>" + (e.jumlahSoal ? "Berisi <b>" + e.jumlahSoal + " soal latihan</b> beserta pembahasannya. " : "") +
-         "Akunmu sekarang hanya membuka materi gratis. Hubungi pemilik arsip untuk membuka seluruh isinya.</p>";
-    h += "</section>";
+    if(e.cuplikan) h += '<p class="kunci-cuplikan">\u201C' + esc(e.cuplikan) + "\u2026\u201D</p>";
+    h += '<div class="kunci-angka">';
+    h += '<span><b>' + esc(labelTipe(e.tipe)) + "</b>Jenis</span>";
+    if(nSoalK) h += "<span><b>" + nSoalK + "</b>Soal latihan</span>";
+    h += "<span><b>" + esc(cariStase(e.stase).kode) + "</b>Stase</span>";
+    h += "</div>";
+    h += "<p>" + esc(T("ajakanKunci")) + "</p>";
+    if(kontak){
+      var wa = kontak.replace(/[^0-9]/g, "").replace(/^0/, "62");
+      h += '<div class="kotak-aksi" style="justify-content:center">';
+      h += '<a class="t utama" href="https://wa.me/' + esc(wa) +
+           '?text=' + encodeURIComponent("Halo, saya mau akses penuh untuk: " + e.judul) +
+           '" target="_blank" rel="noopener noreferrer">Hubungi admin ' + esc(kontak) + "</a></div>";
+    }
+    h += "</div></section>";
+
     panggung.innerHTML = h;
     pasangCari();
     document.getElementById("balik").addEventListener("click", function(){ ui.view = "arsip"; ui.entriId = null; render(); });
@@ -7333,6 +7395,8 @@ function viewAtur(){
   h += tField("labelKuis", "Label tipe: kuis", T("labelKuis"));
   h += tField("labelCatatan", "Label tipe: catatan", T("labelCatatan"));
   h += tField("labelBiko", "Label tipe: biko", T("labelBiko"));
+  h += tField("kontakAdmin", "Kontak admin di halaman terkunci", T("kontakAdmin"));
+  h += tField("ajakanKunci", "Ajakan di halaman terkunci", T("ajakanKunci"));
   h += "</div>";
   h += tField("kaki", "Catatan kaki", T("kaki"));
   h += '<div class="kotak-aksi"><button class="t utama" id="simpanTeks" type="button">Simpan teks</button>';
