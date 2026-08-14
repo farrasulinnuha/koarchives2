@@ -6967,6 +6967,14 @@ function viewAtur(){
 
   // --- akun di server: dikelola sendiri, tanpa menerbitkan ulang situs ---
   if(SERVER.ada){
+    h += '<section class="kotak kaca"><h2>Pemakaian akun</h2>';
+    h += "<p>Satu akun hanya bisa aktif di satu perangkat \u2014 begitu dipakai masuk di tempat lain, sesi yang lama otomatis ditutup. Lihat jejak masuknya di sini kalau ada akun yang mencurigakan; masuk dari banyak kota dalam sehari biasanya berarti akunnya dibagi-bagi.</p>";
+    h += '<div class="kotak-aksi"><select id="jejakAkun" style="flex:1;min-width:150px;padding:9px 11px;border-radius:10px;border:1px solid var(--garis);background:rgba(var(--kaca),.6);font-weight:700"></select>';
+    h += '<button class="t" id="jejakLihat" type="button">Lihat jejak</button>';
+    h += '<button class="t bahaya" id="jejakPutus" type="button">Putus sesinya</button></div>';
+    h += '<div id="jejakHasil" style="margin-top:12px"></div>';
+    h += "</section>";
+
     h += '<section class="kotak kaca"><h2>Permintaan pemulihan sandi</h2>';
     h += "<p>Orang yang lupa sandinya mengajukan lewat layar masuk. Buatkan kodenya di sini, lalu sampaikan kode itu lewat WhatsApp atau langsung \u2014 berlaku 24 jam dan sekali pakai.</p>";
     h += '<div class="kotak-aksi"><button class="t" id="resetMuat" type="button">Lihat permintaan</button>';
@@ -7327,6 +7335,60 @@ async function dorongAtur(){
 
 function pasangAtur(){
   if(SERVER.ada) pasangAkunServerUi();
+
+  var selJejak = document.getElementById("jejakAkun");
+  if(selJejak){
+    muatDaftarAkun().then(function(daftar){
+      var el = document.getElementById("jejakAkun");
+      if(!el) return;
+      el.innerHTML = (daftar || []).map(function(a){
+        return '<option value="' + esc(a.pengguna) + '">' + esc(a.nama) + " (" + esc(a.pengguna) + ")</option>";
+      }).join("");
+    });
+  }
+
+  var bJejak = document.getElementById("jejakLihat");
+  if(bJejak) bJejak.addEventListener("click", async function(){
+    var siapa = (document.getElementById("jejakAkun") || {}).value;
+    var kotak = document.getElementById("jejakHasil");
+    if(!siapa){ kotak.innerHTML = '<p class="bantu" style="margin:0">Pilih akunnya dulu.</p>'; return; }
+    kotak.innerHTML = '<p class="bantu" style="margin:0">Memuat\u2026</p>';
+    var j = await srv("riwayatAkun", {pengguna:siapa});
+    if(j.galat){ kotak.innerHTML = '<p style="margin:0;color:var(--buruk)">' + esc(j.galat) + "</p>"; return; }
+    var r = j.riwayat || [];
+    if(!r.length){ kotak.innerHTML = '<p class="bantu" style="margin:0">Belum pernah masuk.</p>'; return; }
+    // Kota yang berbeda-beda dalam waktu dekat adalah petunjuk paling jelas.
+    var kota = {};
+    r.forEach(function(x){ if(x.kota) kota[x.kota] = true; });
+    var jmlKota = Object.keys(kota).length;
+    var h2 = "";
+    if(jmlKota >= 3){
+      h2 += '<p style="margin:0 0 10px;padding:9px 12px;border-radius:10px;background:var(--tunggu-latar);' +
+            'color:var(--tunggu);font-weight:700;font-size:13px">Masuk dari ' + jmlKota +
+            " kota berbeda dalam " + r.length + " kali masuk terakhir. Periksa apakah akunnya dibagi.</p>";
+    }
+    h2 += r.map(function(x){
+      return '<div class="uji-baris"><span class="uji-nama">' +
+             esc(String(x.waktu || "").slice(0, 16).replace("T", " ")) + "</span>" +
+             '<span class="uji-nilai" style="font-weight:600">' +
+             esc([x.kota, x.negara].filter(Boolean).join(", ") || "lokasi tidak terbaca") +
+             " \u00B7 " + esc(x.perangkat || "?") +
+             (x.ip ? ' \u00B7 <span style="color:var(--redup)">' + esc(x.ip) + "</span>" : "") + "</span></div>";
+    }).join("");
+    kotak.innerHTML = h2;
+  });
+
+  var bPutus = document.getElementById("jejakPutus");
+  if(bPutus) bPutus.addEventListener("click", async function(){
+    var siapa = (document.getElementById("jejakAkun") || {}).value;
+    if(!siapa) return;
+    if(!await tanya("Putus sesi akun ini?",
+        "\u201C" + siapa + "\u201D akan langsung terlempar keluar di perangkat mana pun dan harus masuk lagi.",
+        {ok:"Putus", bahaya:true})) return;
+    var j = await srv("putusSesi", {pengguna:siapa});
+    if(j.galat) return toast(j.galat);
+    toast("Sesi " + siapa + " diputus.");
+  });
 
   var rm = document.getElementById("resetMuat");
   if(rm) rm.addEventListener("click", async function(){
@@ -8127,6 +8189,20 @@ function setToken(t){
   SERVER.token = t || null;
 }
 
+/* Dipanggil begitu server memberi tahu sesinya sudah digantikan di
+   perangkat lain: keluarkan langsung, jangan biarkan layar setengah hidup
+   dengan data basi. */
+var sudahTergusur = false;
+function tanganiTergusur(pesan){
+  if(sudahTergusur) return;
+  sudahTergusur = true;
+  setToken(null);
+  setSesi(null);
+  try{ localStorage.removeItem(KUNCI + "/masuk"); }catch(e){}
+  beritahu("Sesi ditutup", pesan || "Akun ini dipakai masuk di perangkat lain.")
+    .then(function(){ location.reload(); });
+}
+
 async function srv(aksi, data){
   var badan = {aksi:aksi, token:SERVER.token};
   for(var k in (data||{})) badan[k] = data[k];
@@ -8139,6 +8215,7 @@ async function srv(aksi, data){
     j = await r.json();
   }catch(e){ return {galat:"Tidak bisa menghubungi server."}; }
   if(j && j.mati) return {mati:true};
+  if(j && j.tergusur){ tanganiTergusur(j.galat); return {galat:j.galat, tergusur:true}; }
   if(!r.ok) return {galat:(j && j.galat) || ("Server menjawab " + r.status)};
   return j;
 }

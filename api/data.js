@@ -130,16 +130,59 @@ async function siapkanPemilik() {
 
 /* --------------------------------------------------------------- Sesi */
 
-async function buatSesi(pengguna) {
+/* Satu akun hanya boleh punya SATU sesi hidup. Token lama dicabut begitu
+   ada yang masuk lagi, jadi akun yang dijual-ulang saling melempar keluar
+   dan tidak nyaman dipakai berbarengan. */
+async function buatSesi(pengguna, jejak) {
+  // Token lama sengaja TIDAK dihapus: dibiarkan hidup sebentar supaya
+  // pemakainya menerima keterangan "dipakai di perangkat lain", bukan
+  // sekadar terlempar tanpa penjelasan. Yang menentukan sah atau tidak
+  // adalah sesiAktif di bawah, jadi ini tetap tertutup.
   var token = acakHex(32);
   await redis(["SET", "sesi:" + token, pengguna, "EX", String(UMUR_SESI)]);
+  await redis(["SET", "sesiAktif:" + pengguna, token, "EX", String(UMUR_SESI)]);
+
+  if (jejak) {
+    await simpan("perangkat:" + pengguna, jejak);
+    var riwayat = await ambil("riwayat:" + pengguna, []);
+    if (!Array.isArray(riwayat)) riwayat = [];
+    riwayat.unshift(jejak);
+    // Cukup 20 terakhir; ini alat pemantau, bukan arsip.
+    await simpan("riwayat:" + pengguna, riwayat.slice(0, 20));
+  }
   return token;
+}
+
+/* Vercel menyisipkan tebakan lokasi di kepala permintaan, jadi tidak perlu
+   layanan geo terpisah. Alamat IP-nya sendiri tidak disimpan utuh. */
+function jejakPermintaan(req) {
+  function amb(n) { return String(req.headers[n] || "").slice(0, 80); }
+  var kota = amb("x-vercel-ip-city");
+  try { kota = decodeURIComponent(kota); } catch (e) {}
+  var ip = amb("x-forwarded-for").split(",")[0].trim();
+  return {
+    waktu: new Date().toISOString(),
+    kota: kota || "",
+    wilayah: amb("x-vercel-ip-country-region"),
+    negara: amb("x-vercel-ip-country"),
+    // Disimpan sebagai sidik, bukan alamat aslinya.
+    ip: ip ? crypto.createHash("sha256").update(ip).digest("hex").slice(0, 12) : "",
+    perangkat: /mobile|android|iphone|ipad/i.test(amb("user-agent")) ? "ponsel" : "komputer"
+  };
 }
 
 async function akunDariToken(token) {
   if (!token || typeof token !== "string" || token.length !== 64) return null;
   var pengguna = await redis(["GET", "sesi:" + token]);
   if (!pengguna) return null;
+  // Token boleh saja masih ada, tapi kalau bukan lagi yang aktif berarti
+  // sudah digantikan oleh sesi di perangkat lain.
+  var aktif = await redis(["GET", "sesiAktif:" + pengguna]);
+  if (aktif && aktif !== token) return { tergusur: true };
+  // Kalau penandanya sempat kedaluwarsa lebih dulu, token lama bisa hidup
+  // lagi dan batas satu perangkat jebol. Umurnya diperpanjang bersamaan.
+  if (!aktif) await redis(["SET", "sesiAktif:" + pengguna, token, "EX", String(UMUR_SESI)]);
+  else await redis(["EXPIRE", "sesiAktif:" + pengguna, String(UMUR_SESI)]);
   var a = await bacaAkun(pengguna);
   if (!a || a.aktif === false) return null;
   if (a.exp && a.exp < new Date().toISOString().slice(0, 10)) return null;
@@ -302,7 +345,7 @@ module.exports = async function handler(req, res) {
       if (a.exp && a.exp < new Date().toISOString().slice(0, 10)) {
         return res.status(403).json({ galat: "Akun ini sudah lewat masa berlaku." });
       }
-      var token = await buatSesi(a.pengguna);
+      var token = await buatSesi(a.pengguna, jejakPermintaan(req));
       var arsip = await bacaArsip();
       return res.status(200).json({
         token: token, akun: akunAman(a),
@@ -353,7 +396,7 @@ module.exports = async function handler(req, res) {
       var sisaAntre = (await ambil("reset:antre", [])).filter(function (x) { return x.pengguna !== milik; });
       await simpan("reset:antre", sisaAntre);
 
-      var tokenReset = await buatSesi(milik);
+      var tokenReset = await buatSesi(milik, jejakPermintaan(req));
       return res.status(200).json({
         token: tokenReset, akun: akunAman(akunReset),
         arsip: saringUntuk(await bacaArsip(), akunReset),
@@ -402,7 +445,7 @@ module.exports = async function handler(req, res) {
         dibuat: new Date().toISOString().slice(0, 10)
       };
       await tulisAkun(akunBaru);
-      var tokenD = await buatSesi(pd);
+      var tokenD = await buatSesi(pd, jejakPermintaan(req));
       return res.status(200).json({
         token: tokenD, akun: akunAman(akunBaru),
         arsip: saringUntuk(await bacaArsip(), akunBaru),
@@ -412,6 +455,13 @@ module.exports = async function handler(req, res) {
 
     /* ---- semua aksi di bawah butuh token ---- */
     var akun = await akunDariToken(b.token);
+    if (akun && akun.tergusur) {
+      return res.status(401).json({
+        tergusur: true,
+        galat: "Akun ini baru saja dipakai masuk di perangkat lain, jadi sesi di sini ditutup. " +
+          "Satu akun hanya bisa aktif di satu perangkat."
+      });
+    }
 
     /* ---- muat (tanpa token = tamu, hanya materi publik) ---- */
     if (aksi === "muat") {
@@ -430,7 +480,8 @@ module.exports = async function handler(req, res) {
 
     /* ---- keluar ---- */
     if (aksi === "keluar") {
-      await redis(["DEL", "sesi:" + b.token]);
+      await redis(["DEL", "sesi:" + String(b.token || "")]);
+      await redis(["DEL", "sesiAktif:" + akun.pengguna]);
       return res.status(200).json({ status: "keluar" });
     }
 
@@ -686,6 +737,30 @@ module.exports = async function handler(req, res) {
         return res.status(403).json({ galat: "Lampiran ini tidak terbuka untuk akunmu." });
       }
       return res.status(200).json({ nama: lampA.nama, mime: lampA.mime, data: lampA.data });
+    }
+
+    /* ---- jejak masuk (pemilik) ----
+       Bukan untuk mengintai, tapi supaya pola berbagi akun kelihatan:
+       satu akun yang masuk dari banyak kota dalam sehari sulit dijelaskan
+       selain karena dipakai ramai-ramai. */
+    if (aksi === "riwayatAkun") {
+      if (akun.peran !== "pemilik") return res.status(403).json({ galat: "Hanya pemilik." });
+      var sasaranR = normalPengguna(b.pengguna);
+      if (!sasaranR) return res.status(400).json({ galat: "Sebutkan akunnya." });
+      return res.status(200).json({
+        pengguna: sasaranR,
+        terakhir: await ambil("perangkat:" + sasaranR, null),
+        riwayat: await ambil("riwayat:" + sasaranR, [])
+      });
+    }
+
+    if (aksi === "putusSesi") {
+      if (akun.peran !== "pemilik") return res.status(403).json({ galat: "Hanya pemilik." });
+      var sasaranP = normalPengguna(b.pengguna);
+      var tokenLama = await redis(["GET", "sesiAktif:" + sasaranP]);
+      if (tokenLama) await redis(["DEL", "sesi:" + tokenLama]);
+      await redis(["DEL", "sesiAktif:" + sasaranP]);
+      return res.status(200).json({ status: "diputus", pengguna: sasaranP });
     }
 
     /* ---- kelola akun (pemilik) ---- */
