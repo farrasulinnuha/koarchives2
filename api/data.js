@@ -268,6 +268,34 @@ async function masukLuar(profil, asal, req, res) {
   });
 }
 
+/* ------------------------------------------------------------ Pembayaran */
+
+/* Lama akses dihitung dari hari, bukan tanggal tetap, supaya perpanjangan
+   menyambung dari sisa masa aktif yang masih ada. */
+var PAKET = [
+  { id: "b1",  nama: "1 Bulan",     hari: 30,  harga: 89000  },
+  { id: "b3",  nama: "3 Bulan",     hari: 90,  harga: 199000, hemat: "Hemat 25%" },
+  { id: "sem", nama: "1 Semester",  hari: 180, harga: 349000, hemat: "Hemat 35%" },
+  { id: "th1", nama: "1 Tahun",     hari: 365, harga: 549000, hemat: "Hemat 49% - Best Value!" },
+  { id: "per", nama: "Permanen",    hari: 0,   harga: 899000, hemat: "Sekali bayar, akses selamanya + free update" }
+];
+function cariPaket(id) {
+  for (var i = 0; i < PAKET.length; i++) if (PAKET[i].id === id) return PAKET[i];
+  return null;
+}
+
+function tanggalTambah(dasar, hari) {
+  var d = dasar ? new Date(dasar + "T00:00:00") : new Date();
+  if (isNaN(d.getTime())) d = new Date();
+  d.setDate(d.getDate() + hari);
+  return d.toISOString().slice(0, 10);
+}
+
+async function antreBayar() {
+  var a = await ambil("bayar:antre", []);
+  return Array.isArray(a) ? a : [];
+}
+
 /* --------------------------------------------------------------- Sesi */
 
 /* Satu akun hanya boleh punya SATU sesi hidup. Token lama dicabut begitu
@@ -667,6 +695,10 @@ module.exports = async function handler(req, res) {
         pribadi: akun ? await ambil("pribadi:" + akun.pengguna, null) : null,
         tugasan: tugasanUntuk(await bacaTugasan(), akun),
         pendaftaran: (await ambil("atur:pendaftaran", false)) === true,
+        paket: PAKET,
+        rekening: await ambil("atur:rekening", {
+          bank: "Bank Mandiri", nomor: "1140021260123", atasNama: "FARRAS ULINNUHA"
+        }),
         masukLuar: { google: !!GOOGLE_CLIENT_ID, googleId: GOOGLE_CLIENT_ID,
                      sso: !!SSO_CAS, ssoNama: SSO_NAMA,
                      ssoAlamat: SSO_CAS ? SSO_CAS + "/login" : "" },
@@ -908,6 +940,98 @@ module.exports = async function handler(req, res) {
       var sisa = (await ambil("reset:antre", [])).filter(function (x) { return x.pengguna !== buang; });
       await simpan("reset:antre", sisa);
       return res.status(200).json({ antre: sisa });
+    }
+
+    /* ---- pembayaran ---- */
+    if (aksi === "bayarKirim") {
+      var pk = cariPaket(String(b.paket || ""));
+      if (!pk) return res.status(400).json({ galat: "Paketnya tidak dikenali." });
+      var bukti = typeof b.bukti === "string" ? b.bukti : "";
+      if (!bukti || !/^[A-Za-z0-9+/=]+$/.test(bukti)) {
+        return res.status(400).json({ galat: "Bukti transfernya belum dilampirkan." });
+      }
+      if (bukti.length > 2800000) {
+        return res.status(400).json({ galat: "Gambar buktinya terlalu besar. Kecilkan dulu, maksimal sekitar 2 MB." });
+      }
+
+      var antre = await antreBayar();
+      // Satu pengajuan tertunda per akun sudah cukup; kalau tidak, antreannya
+      // bisa dibanjiri kiriman berulang dari satu orang.
+      if (antre.filter(function (x) { return x.pengguna === akun.pengguna && x.status === "menunggu"; }).length) {
+        return res.status(409).json({ galat: "Pengajuanmu yang sebelumnya masih diperiksa. Tunggu dulu ya." });
+      }
+      if (antre.length >= 500) return res.status(429).json({ galat: "Antrean penuh, hubungi pemilik arsip." });
+
+      var idBayar = "by-" + acakHex(8);
+      await simpan("bukti:" + idBayar, { mime: String(b.mime || "image/jpeg").slice(0, 60), data: bukti });
+      antre.unshift({
+        id: idBayar, pengguna: akun.pengguna, nama: akun.nama || akun.pengguna,
+        paket: pk.id, paketNama: pk.nama, harga: pk.harga, hari: pk.hari,
+        catatan: String(b.catatan || "").slice(0, 300),
+        waktu: new Date().toISOString(), status: "menunggu"
+      });
+      await simpan("bayar:antre", antre.slice(0, 500));
+      return res.status(200).json({ status: "terkirim", pesan: "Bukti diterima. Diperiksa paling lama 1x24 jam." });
+    }
+
+    if (aksi === "bayarPunyaku") {
+      var punyaku = (await antreBayar()).filter(function (x) { return x.pengguna === akun.pengguna; });
+      return res.status(200).json({ antre: punyaku.slice(0, 10) });
+    }
+
+    if (aksi === "bayarDaftar") {
+      if (akun.peran !== "pemilik") return res.status(403).json({ galat: "Hanya pemilik." });
+      return res.status(200).json({ antre: await antreBayar() });
+    }
+
+    if (aksi === "bayarBukti") {
+      if (akun.peran !== "pemilik") return res.status(403).json({ galat: "Hanya pemilik." });
+      var idB = String(b.id || "").slice(0, 64);
+      if (!/^[A-Za-z0-9_-]+$/.test(idB)) return res.status(400).json({ galat: "Nama bukti tidak sah." });
+      var bk = await ambil("bukti:" + idB, null);
+      if (!bk) return res.status(404).json({ galat: "Buktinya tidak ada." });
+      return res.status(200).json(bk);
+    }
+
+    if (aksi === "bayarPutus") {
+      if (akun.peran !== "pemilik") return res.status(403).json({ galat: "Hanya pemilik." });
+      var antreP = await antreBayar();
+      var idP = String(b.id || "");
+      var sasaranP = antreP.filter(function (x) { return x.id === idP; })[0];
+      if (!sasaranP) return res.status(404).json({ galat: "Pengajuan tidak ditemukan." });
+
+      if (b.terima === true) {
+        var akunBayar = await bacaAkun(sasaranP.pengguna);
+        if (!akunBayar) return res.status(404).json({ galat: "Akunnya sudah tidak ada." });
+        var hariBeri = b.hari === undefined ? sasaranP.hari : (parseInt(b.hari, 10) || 0);
+        akunBayar.tingkat = "penuh";
+        var hariIniStr = new Date().toISOString().slice(0, 10);
+        if (hariBeri <= 0) {
+          akunBayar.exp = "";                       // permanen
+        } else {
+          // Perpanjangan menyambung dari sisa masa aktif, bukan memotongnya.
+          var dasar = (akunBayar.exp && akunBayar.exp > hariIniStr) ? akunBayar.exp : hariIniStr;
+          akunBayar.exp = tanggalTambah(dasar, hariBeri);
+        }
+        await tulisAkun(akunBayar);
+        sasaranP.status = "diterima";
+        sasaranP.diputus = new Date().toISOString();
+        sasaranP.berlakuSampai = akunBayar.exp || "selamanya";
+      } else {
+        sasaranP.status = "ditolak";
+        sasaranP.diputus = new Date().toISOString();
+        sasaranP.alasan = String(b.alasan || "").slice(0, 300);
+      }
+      await simpan("bayar:antre", antreP);
+      return res.status(200).json({ status: sasaranP.status, antre: antreP, akunDiubah: sasaranP.pengguna });
+    }
+
+    if (aksi === "bayarHapus") {
+      if (akun.peran !== "pemilik") return res.status(403).json({ galat: "Hanya pemilik." });
+      var sisaB = (await antreBayar()).filter(function (x) { return x.id !== String(b.id || ""); });
+      await redis(["DEL", "bukti:" + String(b.id || "")]);
+      await simpan("bayar:antre", sisaB);
+      return res.status(200).json({ antre: sisaB });
     }
 
     /* ---- lampiran berkas ----

@@ -1127,6 +1127,26 @@ input[type=file]{width:100%;padding:10px;border-radius:11px;border:1px dashed va
   font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--redup)}
 .kunci-angka b{font-family:var(--f-tampil);font-size:18px;letter-spacing:-.02em;
   text-transform:none;color:var(--tinta)}
+.paket-kisi{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;margin-bottom:12px}
+.paket-kartu{position:relative;text-align:center;display:flex;flex-direction:column;gap:6px}
+.paket-kartu h2{margin:6px 0 0}
+.paket-unggul{border:2px solid var(--a2)}
+.paket-hemat{position:absolute;top:-9px;left:50%;transform:translateX(-50%);white-space:nowrap;
+  padding:3px 11px;border-radius:100px;background:var(--a2);color:var(--atas-aksen);
+  font-size:10.5px;font-weight:800;letter-spacing:.03em}
+.paket-harga{font-family:var(--f-tampil);font-size:26px;font-weight:800;letter-spacing:-.03em}
+.paket-lama{margin:0 0 8px;font-size:13px;color:var(--redup)}
+.langkah{margin:12px 0 0;padding-left:20px;line-height:1.75;font-size:14.5px}
+.rek-kotak{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin-top:14px;
+  padding:15px 17px;border-radius:14px;border:1px dashed var(--a2);background:rgba(var(--kaca),.55)}
+.rek-bank{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--redup)}
+.rek-nomor{font-family:var(--f-tampil);font-size:23px;font-weight:800;letter-spacing:.02em}
+.rek-nama{font-size:13.5px;font-weight:700;color:var(--redup);margin-bottom:6px}
+.bayar-baris{padding:13px 14px;border-radius:14px;border:1px solid var(--garis);
+  background:rgba(var(--kaca),.5);margin-bottom:9px}
+.bayar-kepala{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:15px}
+.bayar-rinci{margin-top:4px;font-size:13px;font-weight:700;color:var(--redup)}
+.bukti-gambar{display:block;max-width:100%;margin-top:10px;border-radius:12px;border:1px solid var(--garis)}
 .saring-akses{margin-top:-6px}
 .saring-akses .pil b{font-weight:800}
 .kartu-kunci{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:100px;
@@ -2489,7 +2509,8 @@ function soalKeTeks(list){
    ===================================================================== */
 
 var ui = {view:"arsip", stase:"semua", tipe:"semua", akses:"semua", cari:"", entriId:null, kuis:null,
-          catatanStase:null, catatanCari:"", tab:0, tabEntri:null, berkasStase:null};
+          catatanStase:null, catatanCari:"", tab:0, tabEntri:null, berkasStase:null,
+          kelola:"bayar"};
 var sunting = null;
 
 function sesi(){
@@ -2797,6 +2818,7 @@ function navItem(){
   // Kontributor ikut dapat Alat, tapi isinya disaring di dalam viewAlat:
   // hanya jalur tempel JSON. Pengakses tidak melihatnya sama sekali.
   if(bisaTulis()) n.push({v:"alat", ik:"alat", nm:"Alat"});
+  if(pemilik()) n.push({v:"kelola", ik:"tinjau", nm:"Kelola"});
   if(pemilik()) n.push({v:"atur", ik:"atur", nm:"Atur"});
   return n;
 }
@@ -2942,6 +2964,8 @@ function render(){
   else if(ui.view === "jadwal") viewJadwal();
   else if(ui.view === "catatan") viewCatatan();
   else if(ui.view === "berkas") viewBerkas();
+  else if(ui.view === "paket") viewPaket();
+  else if(ui.view === "kelola") viewKelola();
   else if(ui.view === "ipk") viewIpk();
   else if(ui.view === "tampilan") viewTampilan();
   else if(ui.view === "alat") viewAlat();
@@ -3213,18 +3237,15 @@ function viewDetail(){
     h += "<span><b>" + esc(cariStase(e.stase).kode) + "</b>Stase</span>";
     h += "</div>";
     h += "<p>" + esc(T("ajakanKunci")) + "</p>";
-    if(kontak){
-      var wa = kontak.replace(/[^0-9]/g, "").replace(/^0/, "62");
-      h += '<div class="kotak-aksi" style="justify-content:center">';
-      h += '<a class="t utama" href="https://wa.me/' + esc(wa) +
-           '?text=' + encodeURIComponent("Halo, saya mau akses penuh untuk: " + e.judul) +
-           '" target="_blank" rel="noopener noreferrer">Hubungi admin ' + esc(kontak) + "</a></div>";
-    }
+    h += '<div class="kotak-aksi" style="justify-content:center">';
+    h += '<button class="t utama" id="keParaket" type="button">Lihat pilihan paket</button></div>';
     h += "</div></section>";
 
     panggung.innerHTML = h;
     pasangCari();
     document.getElementById("balik").addEventListener("click", function(){ ui.view = "arsip"; ui.entriId = null; render(); });
+    var bkp = document.getElementById("keParaket");
+    if(bkp) bkp.addEventListener("click", function(){ ui.view = "paket"; render(); window.scrollTo(0,0); });
     return;
   }
 
@@ -6996,363 +7017,194 @@ function pasangBerkas(){
   });
 }
 
-function viewIpk(){
-  var d = ipkData();
-  var t = totalIpk();
+/* =====================================================================
+   11f. Halaman paket dan pembayaran
+   ===================================================================== */
 
+function viewPaket(){
   var h = bilahAtas();
-
-  h += '<section class="hero kaca">';
-  h += '<p class="sapa">' + esc(namaAkun() ? namaAkun() : "Tracker pribadi") + "</p>";
-  h += "<h1>IPK kamu</h1>";
-  h += '<div class="angka-baris">';
-  h += '<div class="angka"><b>' + (t.ipk === null ? "\u2013" : angka(t.ipk)) + "</b><span>IPK</span></div>";
-  h += '<div class="angka"><b>' + (t.proyeksi === null ? "\u2013" : angka(t.proyeksi)) + "</b><span>Proyeksi</span></div>";
-  h += '<div class="angka"><b>' + t.sks + "</b><span>SKS lulus</span></div>";
-  h += '<div class="angka"><b>' + t.sksSisa + "</b><span>SKS belum</span></div>";
-  if(t.gagal) h += '<div class="angka"><b style="color:var(--buruk)">' + t.gagal + "</b><span>Di bawah lulus</span></div>";
-  h += "</div>";
-  if(t.ipk !== null && predikat(t.ipk)){
-    h += '<p style="margin-top:14px;font-weight:700;color:var(--a1)">' + esc(predikat(t.ipk)) + "</p>";
-  }
+  h += '<section class="lembar kaca"><button class="balik" id="balik" type="button">' + IKON.balik + "Kembali</button>";
+  h += '<h1 class="judul-besar">Pilihan paket akses</h1>';
+  h += '<p style="color:var(--redup);font-size:14px;margin:10px 0 0;max-width:60ch">Bebas akses seluruh materi, bank kuis, tracker IPK, jadwal, dan checklist berkas. Sekali aktif, semua entri terbuka tanpa batas.</p>';
   h += "</section>";
 
-  d.semester.forEach(function(sm, si){
-    var ts = totalSemester(sm);
-    h += '<section class="kotak kaca" data-sm="' + esc(sm.id) + '">';
-    h += '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">';
-    h += '<input class="sm-nama" type="text" value="' + esc(sm.nama) + '" data-sm="' + esc(sm.id) +
-         '" style="flex:1;min-width:140px;font-family:var(--f-tampil);font-size:19px;font-weight:800;letter-spacing:-.02em;background:transparent;border:0;padding:2px 0;color:var(--tinta)" aria-label="Nama semester">';
-    h += '<span class="tag">IP ' + (ts.ip === null ? "\u2013" : angka(ts.ip)) + "</span>";
-    h += '<span class="tag">' + ts.sks + " SKS</span>";
-    if(ts.rencana) h += '<span class="tag">+' + ts.rencana + " rencana</span>";
-    h += '<button class="t kcl bahaya" data-hapus-sm="' + esc(sm.id) + '" type="button">Hapus</button>';
-    h += "</div>";
-
-    if(!(sm.mk || []).length){
-      h += '<p style="color:var(--redup);font-size:13.5px;margin:10px 0">Belum ada mata kuliah di semester ini.</p>';
-    }
-
-    (sm.mk || []).forEach(function(m){
-      var st = statKomp(m);
-      var terpakai = m.nilai || (st.lengkap && st.huruf) || "";
-      h += '<div class="mk" style="border-top:1px solid var(--garis-halus);padding:12px 0">';
-      h += '<div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap">';
-      h += '<input type="text" value="' + esc(m.nama) + '" data-mk="' + esc(m.id) + '" data-f="nama" placeholder="Nama mata kuliah" style="flex:1;min-width:150px;padding:8px 11px;border-radius:10px;border:1px solid var(--garis);background:rgba(var(--kaca),.6);font-weight:600">';
-      h += '<input type="number" min="0" max="24" value="' + esc(m.sks) + '" data-mk="' + esc(m.id) + '" data-f="sks" aria-label="SKS" style="width:66px;padding:8px 10px;border-radius:10px;border:1px solid var(--garis);background:rgba(var(--kaca),.6);text-align:center;font-weight:700">';
-      h += '<select data-mk="' + esc(m.id) + '" data-f="nilai" aria-label="Nilai akhir" style="width:110px;padding:8px 10px;border-radius:10px;border:1px solid var(--garis);background:rgba(var(--kaca),.6);font-weight:700">' + opsiHuruf(m.nilai, "Belum") + "</select>";
-      if(!m.nilai){
-        h += '<select data-mk="' + esc(m.id) + '" data-f="sim" aria-label="Simulasi nilai" style="width:120px;padding:8px 10px;border-radius:10px;border:1px dashed var(--a1);background:rgba(var(--kaca),.45);font-weight:700">' + opsiHuruf(m.sim, "Simulasi") + "</select>";
-      }
-      h += '<button class="t kcl" data-buka-mk="' + esc(m.id) + '" type="button">' + (m.buka ? "Tutup" : "Rincian") + "</button>";
-      h += '<button class="t kcl bahaya" data-hapus-mk="' + esc(m.id) + '" type="button" aria-label="Hapus">&times;</button>';
-      h += "</div>";
-
-      if(st.ada && !m.nilai){
-        h += '<p style="margin:8px 0 0;font-size:13px;color:var(--redup)">Nilai berjalan <b style="color:var(--tinta)">' +
-             (st.nilai === null ? "\u2013" : angka(st.nilai, 1)) + "</b>" +
-             (st.huruf ? " (" + esc(st.huruf) + ")" : "") +
-             (st.bSisa > 0 ? " \u00B7 rentang akhir " + angka(st.min,1) + "\u2013" + angka(st.maks,1) : "") + "</p>";
-      }
-
-      if(m.buka){
-        h += '<div style="margin-top:11px;padding:13px;border-radius:var(--r-m);background:rgba(var(--kaca),.45);border:1px solid var(--garis)">';
-        h += '<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">';
-        Object.keys(POLA_KOMP).forEach(function(p){
-          h += '<button class="t kcl" data-pola="' + p + '" data-mk="' + esc(m.id) + '" type="button">Pola ' + p + "</button>";
-        });
-        h += '<button class="t kcl" data-tambah-komp="' + esc(m.id) + '" type="button">+ Komponen</button>';
-        h += "</div>";
-
-        if(!(m.komp || []).length){
-          h += '<p style="color:var(--redup);font-size:13px;margin:0">Belum ada komponen. Pilih pola di atas atau tambah sendiri.</p>';
-        }
-        (m.komp || []).forEach(function(k){
-          h += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:7px;flex-wrap:wrap">';
-          h += '<input type="text" value="' + esc(k.nama) + '" data-komp="' + esc(k.id) + '" data-mk="' + esc(m.id) + '" data-f="nama" placeholder="Komponen" style="flex:1;min-width:110px;padding:6px 10px;border-radius:9px;border:1px solid var(--garis);background:rgba(var(--kaca),.6)">';
-          h += '<input type="number" min="0" max="100" value="' + esc(k.bobot) + '" data-komp="' + esc(k.id) + '" data-mk="' + esc(m.id) + '" data-f="bobot" aria-label="Bobot persen" style="width:72px;padding:6px 9px;border-radius:9px;border:1px solid var(--garis);background:rgba(var(--kaca),.6);text-align:center">';
-          h += '<span style="font-size:12px;color:var(--redup)">%</span>';
-          h += '<input type="number" min="0" max="100" step="0.1" value="' + esc(k.skor) + '" data-komp="' + esc(k.id) + '" data-mk="' + esc(m.id) + '" data-f="skor" placeholder="skor" style="width:84px;padding:6px 9px;border-radius:9px;border:1px solid var(--garis);background:rgba(var(--kaca),.6);text-align:center">';
-          h += '<button class="t kcl bahaya" data-hapus-komp="' + esc(k.id) + '" data-mk="' + esc(m.id) + '" type="button" aria-label="Hapus">&times;</button>';
-          h += "</div>";
-        });
-
-        if(st.ada){
-          h += '<p style="margin:10px 0 0;font-size:13px;color:var(--redup)">Total bobot <b style="color:' +
-               (Math.abs(st.bTotal - 100) < 0.01 ? "var(--baik)" : "var(--tunggu)") + '">' + angka(st.bTotal,0) + "%</b>";
-          if(Math.abs(st.bTotal - 100) >= 0.01) h += " \u2014 biasanya harus 100%";
-          h += "</p>";
-
-          if(st.bSisa > 1e-9){
-            h += '<div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
-            h += '<span style="font-size:13px;font-weight:700">Target</span>';
-            h += '<select data-mk="' + esc(m.id) + '" data-f="target" style="width:110px;padding:6px 9px;border-radius:9px;border:1px solid var(--garis);background:rgba(var(--kaca),.6);font-weight:700">' + opsiHuruf(m.target, "\u2013") + "</select>";
-            var tScore = null;
-            d.skala.forEach(function(s){ if(s.huruf === m.target) tScore = s.min; });
-            if(tScore !== null){
-              var bn = butuhNilai(st, tScore);
-              if(bn && !bn.selesai){
-                var perlu = bn.butuh;
-                var warna = perlu > 100 ? "var(--buruk)" : (perlu <= 0 ? "var(--baik)" : "var(--tinta)");
-                var pesan = perlu > 100 ? "tidak lagi tercapai"
-                          : (perlu <= 0 ? "sudah aman" : "butuh rata-rata " + angka(perlu,1) + " di sisa komponen");
-                h += '<span style="font-size:13px;color:' + warna + ';font-weight:700">' + esc(pesan) + "</span>";
-              }
-            }
-            h += "</div>";
-          }
-        }
-        h += "</div>";
-      }
-      h += "</div>";
-    });
-
-    h += '<div class="kotak-aksi"><button class="t kcl" data-tambah-mk="' + esc(sm.id) + '" type="button">+ Mata kuliah</button></div>';
+  h += '<div class="paket-kisi">';
+  PAKET.forEach(function(p){
+    var unggul = p.id === "th1";
+    h += '<section class="kotak kaca paket-kartu' + (unggul ? " paket-unggul" : "") + '">';
+    if(p.hemat) h += '<span class="paket-hemat">' + esc(p.hemat) + "</span>";
+    h += "<h2>" + esc(p.nama) + "</h2>";
+    h += '<div class="paket-harga">' + esc(rupiah(p.harga)) + "</div>";
+    h += '<p class="paket-lama">' + (p.hari ? "Akses " + p.hari + " hari" : "Sekali bayar, akses selamanya") + "</p>";
+    h += '<button class="t ' + (unggul ? "utama" : "") + '" type="button" data-paket="' + esc(p.id) + '">Pilih paket ini</button>';
     h += "</section>";
   });
-
-  h += '<section class="kotak kaca">';
-  h += '<div class="kotak-aksi" style="margin-top:0">';
-  h += '<button class="t utama" id="tambahSm" type="button">+ Semester</button>';
-  h += '<button class="t" id="ipkEkspor" type="button">Unduh cadangan</button>';
-  h += '<button class="t" id="ipkImpor" type="button">Pulihkan</button>';
   h += "</div>";
-  h += '<p style="color:var(--redup);font-size:12.5px;margin:14px 0 0;line-height:1.5">' +
-       (SERVER.ada && penggunaAkun()
-         ? "Data IPK ini milik akunmu sendiri, ikut tersimpan di server supaya tetap ada saat kamu buka dari perangkat lain. Pemilik arsip tidak bisa melihatnya."
-         : "Data IPK ini tersimpan di browser ini saja, terpisah dari akun lain, dan tidak pernah ikut terkirim ke pemilik arsip. Unduh cadangan sebelum ganti perangkat.") + "</p>";
-  h += "</section>";
 
-  // Skala nilai milik tiap akun sendiri: KKM tiap kampus, stase, dan dosen
-  // berbeda, jadi ambang huruf tidak boleh dipatok satu angka untuk semua.
-  h += '<section class="kotak kaca"><h2>Skala nilai</h2>';
-  h += "<p>Atur sendiri batas bawah tiap huruf dan bobot poinnya. Dipakai untuk menghitung nilai dari komponen, simulasi, dan IPK. Tersimpan di akunmu, tidak memengaruhi akun lain.</p>";
-  h += '<div id="skalaKotak">';
-  h += '<div style="display:grid;grid-template-columns:72px minmax(0,150px) minmax(0,150px);gap:8px;align-items:center;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--redup);margin-bottom:6px">' +
-       "<span>Huruf</span><span>Nilai minimal</span><span>Bobot poin</span></div>";
-  d.skala.forEach(function(sk, i){
-    h += '<div style="display:grid;grid-template-columns:72px minmax(0,150px) minmax(0,150px);gap:8px;align-items:center;margin-bottom:6px">';
-    h += '<input type="text" value="' + esc(sk.huruf) + '" data-skala="' + i + '" data-f="huruf" maxlength="4" aria-label="Huruf" style="padding:7px 9px;border-radius:9px;border:1px solid var(--garis);background:rgba(var(--kaca),.6);font-weight:800;text-align:center">';
-    h += '<input type="number" min="0" max="100" step="0.5" value="' + esc(sk.min) + '" data-skala="' + i + '" data-f="min" aria-label="Nilai minimal" style="padding:7px 9px;border-radius:9px;border:1px solid var(--garis);background:rgba(var(--kaca),.6);text-align:center">';
-    h += '<input type="number" min="0" max="4" step="0.05" value="' + esc(sk.poin) + '" data-skala="' + i + '" data-f="poin" aria-label="Bobot poin" style="padding:7px 9px;border-radius:9px;border:1px solid var(--garis);background:rgba(var(--kaca),.6);text-align:center">';
-    h += "</div>";
-  });
-  h += "</div>";
-  // Menyunting 14 baris dengan tangan gampang membuat ambangnya tumpang
-  // tindih; kalau dibiarkan diam, nilainya salah tanpa ketahuan.
-  var kacau = [];
-  for(var iz = 1; iz < d.skala.length; iz++){
-    if(Number(d.skala[iz].min) >= Number(d.skala[iz - 1].min)){
-      kacau.push(esc(d.skala[iz].huruf) + " vs " + esc(d.skala[iz - 1].huruf));
-    }
-  }
-  if(kacau.length){
-    h += '<p class="skala-awas">Batas nilai perlu menurun dari atas ke bawah. Yang bertabrakan: ' +
-         kacau.join(", ") + ".</p>";
-  }
-  h += '<div class="kotak-aksi"><button class="t" id="skalaBawaan" type="button">Kembalikan bawaan</button>';
-  h += '<span style="font-size:13px;color:var(--redup);align-self:center">Batas lulus: </span>';
-  h += '<select id="skalaLulus" style="width:120px;padding:7px 10px;border-radius:9px;border:1px solid var(--garis);background:rgba(var(--kaca),.6);font-weight:700">' + opsiHuruf(d.lulus, "\u2013") + "</select>";
+  h += '<section class="kotak kaca"><h2>Cara membayar</h2>';
+  h += '<ol class="langkah"><li>Pilih paket di atas.</li>' +
+       "<li>Transfer sesuai nominalnya ke rekening berikut.</li>" +
+       "<li>Unggah bukti transfernya.</li>" +
+       "<li>Pemilik memeriksa paling lama <b>1x24 jam</b>, lalu aksesmu terbuka sendiri.</li></ol>";
+  h += '<div class="rek-kotak">';
+  h += '<span class="rek-bank">' + esc(REKENING.bank) + "</span>";
+  h += '<span class="rek-nomor" id="rekNomor">' + esc(REKENING.nomor) + "</span>";
+  h += '<span class="rek-nama">a.n. ' + esc(REKENING.atasNama) + "</span>";
+  h += '<button class="t kcl" id="salinRek" type="button">Salin nomor</button>';
   h += "</div></section>";
 
+  if(SERVER.ada && penggunaAkun()){
+    h += '<section class="kotak kaca"><h2>Kirim bukti transfer</h2>';
+    h += '<div id="bayarPunyaku"></div>';
+    h += '<div class="b"><label for="bayarPaket">Paket yang dibayar</label><select id="bayarPaket">' +
+         PAKET.map(function(p){ return '<option value="' + esc(p.id) + '">' + esc(p.nama) + " \\u00B7 " + esc(rupiah(p.harga)) + "</option>"; }).join("") +
+         "</select></div>";
+    h += '<div class="b"><label for="bayarBukti">Foto atau tangkapan layar bukti transfer</label>';
+    h += '<input type="file" id="bayarBukti" accept="image/*">';
+    h += '<span class="bantu">Maksimal sekitar 2 MB. Pastikan nominal dan tanggalnya terbaca.</span></div>';
+    h += '<div class="b"><label for="bayarCatatan">Catatan (boleh kosong)</label>';
+    h += '<input id="bayarCatatan" type="text" maxlength="300" placeholder="mis. transfer atas nama kakak saya"></div>';
+    h += '<div class="kotak-aksi"><button class="t utama" id="bayarKirim" type="button">Kirim bukti</button>';
+    h += '<span id="bayarKabar" class="bantu" style="align-self:center"></span></div>';
+    h += "</section>";
+  } else {
+    h += '<section class="kotak kaca"><p style="margin:0">Masuk dengan akunmu dulu supaya bukti transfernya bisa dihubungkan ke akun yang mau dibuka.</p></section>';
+  }
 
   panggung.innerHTML = h;
   pasangCari();
-  pasangIpk();
+  pasangPaket();
 }
 
-function cariMk(id){
-  var hasil = null;
-  ipkData().semester.forEach(function(sm){
-    (sm.mk || []).forEach(function(m){ if(m.id === id) hasil = m; });
-  });
-  return hasil;
-}
+function pasangPaket(){
+  var kembali = document.getElementById("balik");
+  if(kembali) kembali.addEventListener("click", function(){ ui.view = "arsip"; render(); });
 
-function pasangIpk(){
-  function simpanUlang(){ simpanPribadi(); render(); }
-
-  Array.prototype.forEach.call(panggung.querySelectorAll(".sm-nama"), function(el){
-    el.addEventListener("change", function(){
-      var sm = ipkData().semester.filter(function(x){ return x.id === el.dataset.sm; })[0];
-      if(sm){ sm.nama = el.value; simpanPribadi(); }
-    });
-  });
-
-  Array.prototype.forEach.call(panggung.querySelectorAll("[data-mk][data-f]"), function(el){
-    if(el.dataset.komp) return;
-    var ev = el.tagName === "SELECT" ? "change" : "input";
-    el.addEventListener(ev, function(){
-      var m = cariMk(el.dataset.mk);
-      if(!m) return;
-      var f = el.dataset.f;
-      m[f] = (f === "sks") ? (el.value === "" ? "" : Number(el.value)) : el.value;
-      if(f === "nilai" || f === "sim" || f === "target"){ simpanUlang(); }
-      else simpanPribadi();
-    });
-  });
-
-  Array.prototype.forEach.call(panggung.querySelectorAll("[data-komp]"), function(el){
-    if(!el.dataset.f) return;
-    el.addEventListener("input", function(){
-      var m = cariMk(el.dataset.mk);
-      if(!m) return;
-      var k = (m.komp || []).filter(function(x){ return x.id === el.dataset.komp; })[0];
-      if(!k) return;
-      var f = el.dataset.f;
-      k[f] = (f === "nama") ? el.value : (el.value === "" ? "" : Number(el.value));
-      simpanPribadi();
-    });
-  });
-
-  Array.prototype.forEach.call(panggung.querySelectorAll("[data-buka-mk]"), function(b){
+  Array.prototype.forEach.call(panggung.querySelectorAll("[data-paket]"), function(b){
     b.addEventListener("click", function(){
-      var m = cariMk(b.dataset.bukaMk);
-      if(m){ m.buka = !m.buka; simpanUlang(); }
+      var sel = document.getElementById("bayarPaket");
+      if(sel){ sel.value = b.dataset.paket; sel.scrollIntoView({block:"center"}); sel.focus(); }
+      else toast("Masuk dulu untuk mengirim bukti transfer.");
     });
   });
 
-  Array.prototype.forEach.call(panggung.querySelectorAll("[data-tambah-mk]"), function(b){
-    b.addEventListener("click", function(){
-      var sm = ipkData().semester.filter(function(x){ return x.id === b.dataset.tambahMk; })[0];
-      if(!sm) return;
-      if(!sm.mk) sm.mk = [];
-      sm.mk.push(mkBaru());
-      simpanUlang();
+  var sr = document.getElementById("salinRek");
+  if(sr) sr.addEventListener("click", function(){ salin(REKENING.nomor, "Nomor rekening disalin."); });
+
+  var kotakPunyaku = document.getElementById("bayarPunyaku");
+  if(kotakPunyaku){
+    srv("bayarPunyaku", {}).then(function(j){
+      var el = document.getElementById("bayarPunyaku");
+      if(!el || j.galat || !(j.antre || []).length) return;
+      el.innerHTML = j.antre.map(function(x){
+        var warna = x.status === "diterima" ? "var(--baik)" : x.status === "ditolak" ? "var(--buruk)" : "var(--tunggu)";
+        return '<div class="uji-baris"><span class="uji-nama">' + esc(x.paketNama) + " \\u00B7 " +
+               esc(String(x.waktu).slice(0,10)) + "</span>" +
+               '<span class="uji-nilai" style="color:' + warna + '">' + esc(x.status) +
+               (x.berlakuSampai ? " \\u00B7 sampai " + esc(x.berlakuSampai) : "") +
+               (x.alasan ? " \\u00B7 " + esc(x.alasan) : "") + "</span></div>";
+      }).join("");
     });
-  });
+  }
 
-  Array.prototype.forEach.call(panggung.querySelectorAll("[data-hapus-mk]"), function(b){
-    b.addEventListener("click", async function(){
-      var m = cariMk(b.dataset.hapusMk);
-      if(!await tanya("Hapus mata kuliah?", '"' + ((m && m.nama) || "Mata kuliah ini") + '" akan dihapus dari semester ini.',
-                      {ok:"Hapus", bahaya:true})) return;
-      ipkData().semester.forEach(function(sm){
-        sm.mk = (sm.mk || []).filter(function(x){ return x.id !== b.dataset.hapusMk; });
-      });
-      simpanUlang();
+  var bk = document.getElementById("bayarKirim");
+  if(bk) bk.addEventListener("click", async function(){
+    var kabar = document.getElementById("bayarKabar");
+    var berkas = (document.getElementById("bayarBukti").files || [])[0];
+    if(!berkas){ kabar.textContent = "Pilih dulu foto bukti transfernya."; kabar.style.color = "var(--buruk)"; return; }
+    if(berkas.size > 2500000){
+      kabar.textContent = "Gambarnya lebih dari 2 MB. Kecilkan dulu atau pakai tangkapan layar.";
+      kabar.style.color = "var(--buruk)"; return;
+    }
+    bk.disabled = true; kabar.textContent = "Mengirim\u2026"; kabar.style.color = "var(--redup)";
+    var data;
+    try{ data = await base64Berkas(berkas); }
+    catch(err){ bk.disabled = false; kabar.textContent = err.message; kabar.style.color = "var(--buruk)"; return; }
+
+    var j = await srv("bayarKirim", {
+      paket: document.getElementById("bayarPaket").value,
+      bukti: data, mime: berkas.type || "image/jpeg",
+      catatan: document.getElementById("bayarCatatan").value
     });
-  });
-
-  Array.prototype.forEach.call(panggung.querySelectorAll("[data-hapus-sm]"), function(b){
-    b.addEventListener("click", async function(){
-      if(!await tanya("Hapus semester?", "Semester ini beserta seluruh mata kuliah di dalamnya akan dihapus.",
-                      {ok:"Hapus", bahaya:true})) return;
-      ipkData().semester = ipkData().semester.filter(function(x){ return x.id !== b.dataset.hapusSm; });
-      simpanUlang();
-    });
-  });
-
-  Array.prototype.forEach.call(panggung.querySelectorAll("[data-pola]"), function(b){
-    b.addEventListener("click", async function(){
-      var m = cariMk(b.dataset.mk);
-      if(!m) return;
-      if((m.komp || []).length &&
-         !await tanya("Ganti komponen?", "Komponen yang sudah ada di mata kuliah ini akan ditimpa pola baru.",
-                      {ok:"Ganti"})) return;
-      m.komp = POLA_KOMP[b.dataset.pola].map(function(p){
-        return {id:idBaru("kp"), nama:p[0], bobot:p[1], skor:""};
-      });
-      simpanUlang();
-    });
-  });
-
-  Array.prototype.forEach.call(panggung.querySelectorAll("[data-tambah-komp]"), function(b){
-    b.addEventListener("click", function(){
-      var m = cariMk(b.dataset.tambahKomp);
-      if(!m) return;
-      if(!m.komp) m.komp = [];
-      m.komp.push({id:idBaru("kp"), nama:"", bobot:0, skor:""});
-      simpanUlang();
-    });
-  });
-
-  Array.prototype.forEach.call(panggung.querySelectorAll("[data-hapus-komp]"), function(b){
-    b.addEventListener("click", function(){
-      var m = cariMk(b.dataset.mk);
-      if(!m) return;
-      m.komp = (m.komp || []).filter(function(x){ return x.id !== b.dataset.hapusKomp; });
-      simpanUlang();
-    });
-  });
-
-  Array.prototype.forEach.call(panggung.querySelectorAll("[data-skala]"), function(el){
-    el.addEventListener("input", function(){
-      var d = ipkData();
-      var baris = d.skala[Number(el.dataset.skala)];
-      if(!baris) return;
-      var f = el.dataset.f;
-      if(f === "huruf") baris.huruf = el.value;
-      else baris[f] = el.value === "" ? 0 : Number(el.value);
-      simpanPribadi();
-    });
-    // Angka baru mengubah semua hitungan, jadi digambar ulang saat selesai.
-    el.addEventListener("change", function(){ render(); });
-  });
-
-  var slLulus = document.getElementById("skalaLulus");
-  if(slLulus) slLulus.addEventListener("change", function(){
-    ipkData().lulus = slLulus.value;
-    simpanPribadi(); render();
-  });
-
-  var slBawaan = document.getElementById("skalaBawaan");
-  if(slBawaan) slBawaan.addEventListener("click", async function(){
-    if(!await tanya("Kembalikan skala nilai ke bawaan?",
-          "Semua batas huruf dan bobot poin yang kamu ubah akan kembali ke setelan awal.",
-          {ok:"Kembalikan"})) return;
-    ipkData().skala = ipkKosong().skala;
-    simpanPribadi(); render();
-    toast("Skala nilai dikembalikan.");
-  });
-
-  document.getElementById("tambahSm").addEventListener("click", function(){
-    var d = ipkData();
-    d.semester.push({id:idBaru("sm"), nama:"Semester " + (d.semester.length + 1), mk:[]});
-    simpanUlang();
-  });
-
-  document.getElementById("ipkEkspor").addEventListener("click", function(){
-    unduh("tracker-ipk-" + (penggunaAkun() || "saya") + "-" + hariIni() + ".json", JSON.stringify(ipkData(), null, 2));
-  });
-
-  document.getElementById("ipkImpor").addEventListener("click", async function(){
-    var t = await mintaTeks("Pulihkan data IPK", "Isi berkas cadangan (.json)",
-      {pesan:"Buka berkas cadanganmu dengan editor teks, lalu tempel seluruh isinya di sini.",
-       banyakBaris:true, ok:"Pulihkan"});
-    if(t === null) return;
-    try{
-      var j = JSON.parse(t);
-      if(!j || !Array.isArray(j.semester)) throw new Error("Bentuknya tidak dikenali");
-      pribadi.ipk = j;
-      simpanPribadi();
-      render();
-      toast("Data IPK dipulihkan.");
-    }catch(err){ toast("Gagal memulihkan: " + err.message); }
+    bk.disabled = false;
+    if(j.galat){ kabar.textContent = j.galat; kabar.style.color = "var(--buruk)"; return; }
+    kabar.textContent = j.pesan || "Terkirim.";
+    kabar.style.color = "var(--baik)";
+    document.getElementById("bayarBukti").value = "";
+    beritahu("Bukti terkirim", "Pemilik akan memeriksanya paling lama 1x24 jam. Kamu bisa menutup halaman ini \u2014 aksesnya terbuka sendiri begitu disetujui.");
   });
 }
 
-/* =====================================================================
-   13. Pengaturan (pemilik)
-   ===================================================================== */
+function pasangJejak(){
+  var selJejak = document.getElementById("jejakAkun");
+  if(selJejak){
+    muatDaftarAkun().then(function(daftar){
+      var el = document.getElementById("jejakAkun");
+      if(!el) return;
+      el.innerHTML = (daftar || []).map(function(a){
+        return '<option value="' + esc(a.pengguna) + '">' + esc(a.nama) + " (" + esc(a.pengguna) + ")</option>";
+      }).join("");
+    });
+  }
 
-function viewAtur(){
+  var bJejak = document.getElementById("jejakLihat");
+  if(bJejak) bJejak.addEventListener("click", async function(){
+    var siapa = (document.getElementById("jejakAkun") || {}).value;
+    var kotak = document.getElementById("jejakHasil");
+    if(!siapa){ kotak.innerHTML = '<p class="bantu" style="margin:0">Pilih akunnya dulu.</p>'; return; }
+    kotak.innerHTML = '<p class="bantu" style="margin:0">Memuat\u2026</p>';
+    var j = await srv("riwayatAkun", {pengguna:siapa});
+    if(j.galat){ kotak.innerHTML = '<p style="margin:0;color:var(--buruk)">' + esc(j.galat) + "</p>"; return; }
+    var r = j.riwayat || [];
+    if(!r.length){ kotak.innerHTML = '<p class="bantu" style="margin:0">Belum pernah masuk.</p>'; return; }
+    // Kota yang berbeda-beda dalam waktu dekat adalah petunjuk paling jelas.
+    var kota = {};
+    r.forEach(function(x){ if(x.kota) kota[x.kota] = true; });
+    var jmlKota = Object.keys(kota).length;
+    var h2 = "";
+    if(jmlKota >= 3){
+      h2 += '<p style="margin:0 0 10px;padding:9px 12px;border-radius:10px;background:var(--tunggu-latar);' +
+            'color:var(--tunggu);font-weight:700;font-size:13px">Masuk dari ' + jmlKota +
+            " kota berbeda dalam " + r.length + " kali masuk terakhir. Periksa apakah akunnya dibagi.</p>";
+    }
+    h2 += r.map(function(x){
+      return '<div class="uji-baris"><span class="uji-nama">' +
+             esc(String(x.waktu || "").slice(0, 16).replace("T", " ")) + "</span>" +
+             '<span class="uji-nilai" style="font-weight:600">' +
+             esc([x.kota, x.negara].filter(Boolean).join(", ") || "lokasi tidak terbaca") +
+             " \u00B7 " + esc(x.perangkat || "?") +
+             (x.ip ? ' \u00B7 <span style="color:var(--redup)">' + esc(x.ip) + "</span>" : "") + "</span></div>";
+    }).join("");
+    kotak.innerHTML = h2;
+  });
+
+  var bPutus = document.getElementById("jejakPutus");
+  if(bPutus) bPutus.addEventListener("click", async function(){
+    var siapa = (document.getElementById("jejakAkun") || {}).value;
+    if(!siapa) return;
+    if(!await tanya("Putus sesi akun ini?",
+        "\u201C" + siapa + "\u201D akan langsung terlempar keluar di perangkat mana pun dan harus masuk lagi.",
+        {ok:"Putus", bahaya:true})) return;
+    var j = await srv("putusSesi", {pengguna:siapa});
+    if(j.galat) return toast(j.galat);
+    toast("Sesi " + siapa + " diputus.");
+  });
+
+}
+
+function viewKelola(){
   if(!pemilik()){ ui.view = "arsip"; return render(); }
-
   var h = bilahAtas();
-  h += '<section class="lembar kaca"><h1 class="judul-besar">Pengaturan</h1>';
-  h += '<p style="color:var(--redup);font-size:14px;margin:10px 0 0;max-width:60ch">Semua di halaman ini hanya untuk pemilik arsip. Perubahan langsung tersimpan di browser ini.</p></section>';
+  h += '<section class="lembar kaca"><h1 class="judul-besar">Kelola</h1>';
+  h += '<p style="color:var(--redup);font-size:14px;margin:10px 0 0;max-width:60ch">Pembayaran masuk, daftar akun, dan jejak pemakaian sesi \u2014 semuanya di satu tempat.</p>';
+  h += '<div class="saring" style="margin-top:16px">';
+  [["bayar","Pembayaran"],["akun","Akun"],["sesi","Pemakaian sesi"]].forEach(function(t){
+    h += '<button class="pil" type="button" data-kel="' + t[0] + '" aria-pressed="' +
+         (ui.kelola === t[0] ? "true" : "false") + '">' + esc(t[1]) + "</button>";
+  });
+  h += "</div></section>";
 
-  // --- akun di server: dikelola sendiri, tanpa menerbitkan ulang situs ---
-  if(SERVER.ada){
-    h += '<section class="kotak kaca"><h2>Pemakaian akun</h2>';
-    h += "<p>Satu akun hanya bisa aktif di satu perangkat \u2014 begitu dipakai masuk di tempat lain, sesi yang lama otomatis ditutup. Lihat jejak masuknya di sini kalau ada akun yang mencurigakan; masuk dari banyak kota dalam sehari biasanya berarti akunnya dibagi-bagi.</p>";
-    h += '<div class="kotak-aksi"><select id="jejakAkun" style="flex:1;min-width:150px;padding:9px 11px;border-radius:10px;border:1px solid var(--garis);background:rgba(var(--kaca),.6);font-weight:700"></select>';
-    h += '<button class="t" id="jejakLihat" type="button">Lihat jejak</button>';
-    h += '<button class="t bahaya" id="jejakPutus" type="button">Putus sesinya</button></div>';
-    h += '<div id="jejakHasil" style="margin-top:12px"></div>';
-    h += "</section>";
-
+  if(ui.kelola === "sesi"){
     h += '<section class="kotak kaca"><h2>Permintaan pemulihan sandi</h2>';
     h += "<p>Orang yang lupa sandinya mengajukan lewat layar masuk. Buatkan kodenya di sini, lalu sampaikan kode itu lewat WhatsApp atau langsung \u2014 berlaku 24 jam dan sekali pakai.</p>";
     h += '<div class="kotak-aksi"><button class="t" id="resetMuat" type="button">Lihat permintaan</button>';
@@ -7715,60 +7567,6 @@ async function dorongAtur(){
 
 function pasangAtur(){
   if(SERVER.ada) pasangAkunServerUi();
-
-  var selJejak = document.getElementById("jejakAkun");
-  if(selJejak){
-    muatDaftarAkun().then(function(daftar){
-      var el = document.getElementById("jejakAkun");
-      if(!el) return;
-      el.innerHTML = (daftar || []).map(function(a){
-        return '<option value="' + esc(a.pengguna) + '">' + esc(a.nama) + " (" + esc(a.pengguna) + ")</option>";
-      }).join("");
-    });
-  }
-
-  var bJejak = document.getElementById("jejakLihat");
-  if(bJejak) bJejak.addEventListener("click", async function(){
-    var siapa = (document.getElementById("jejakAkun") || {}).value;
-    var kotak = document.getElementById("jejakHasil");
-    if(!siapa){ kotak.innerHTML = '<p class="bantu" style="margin:0">Pilih akunnya dulu.</p>'; return; }
-    kotak.innerHTML = '<p class="bantu" style="margin:0">Memuat\u2026</p>';
-    var j = await srv("riwayatAkun", {pengguna:siapa});
-    if(j.galat){ kotak.innerHTML = '<p style="margin:0;color:var(--buruk)">' + esc(j.galat) + "</p>"; return; }
-    var r = j.riwayat || [];
-    if(!r.length){ kotak.innerHTML = '<p class="bantu" style="margin:0">Belum pernah masuk.</p>'; return; }
-    // Kota yang berbeda-beda dalam waktu dekat adalah petunjuk paling jelas.
-    var kota = {};
-    r.forEach(function(x){ if(x.kota) kota[x.kota] = true; });
-    var jmlKota = Object.keys(kota).length;
-    var h2 = "";
-    if(jmlKota >= 3){
-      h2 += '<p style="margin:0 0 10px;padding:9px 12px;border-radius:10px;background:var(--tunggu-latar);' +
-            'color:var(--tunggu);font-weight:700;font-size:13px">Masuk dari ' + jmlKota +
-            " kota berbeda dalam " + r.length + " kali masuk terakhir. Periksa apakah akunnya dibagi.</p>";
-    }
-    h2 += r.map(function(x){
-      return '<div class="uji-baris"><span class="uji-nama">' +
-             esc(String(x.waktu || "").slice(0, 16).replace("T", " ")) + "</span>" +
-             '<span class="uji-nilai" style="font-weight:600">' +
-             esc([x.kota, x.negara].filter(Boolean).join(", ") || "lokasi tidak terbaca") +
-             " \u00B7 " + esc(x.perangkat || "?") +
-             (x.ip ? ' \u00B7 <span style="color:var(--redup)">' + esc(x.ip) + "</span>" : "") + "</span></div>";
-    }).join("");
-    kotak.innerHTML = h2;
-  });
-
-  var bPutus = document.getElementById("jejakPutus");
-  if(bPutus) bPutus.addEventListener("click", async function(){
-    var siapa = (document.getElementById("jejakAkun") || {}).value;
-    if(!siapa) return;
-    if(!await tanya("Putus sesi akun ini?",
-        "\u201C" + siapa + "\u201D akan langsung terlempar keluar di perangkat mana pun dan harus masuk lagi.",
-        {ok:"Putus", bahaya:true})) return;
-    var j = await srv("putusSesi", {pengguna:siapa});
-    if(j.galat) return toast(j.galat);
-    toast("Sesi " + siapa + " diputus.");
-  });
 
   var rm = document.getElementById("resetMuat");
   if(rm) rm.addEventListener("click", async function(){
@@ -8834,6 +8632,11 @@ async function cekClaude(){
 /* true kalau server mengizinkan orang mendaftar sendiri. Diisi saat muat. */
 var PENDAFTARAN_BUKA = false;
 var MASUK_LUAR = {google:false, googleId:"", sso:false, ssoNama:"", ssoAlamat:""};
+var PAKET = [];
+var REKENING = {bank:"Bank Mandiri", nomor:"1140021260123", atasNama:"FARRAS ULINNUHA"};
+function rupiah(n){
+  return "Rp " + String(n || 0).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
 
 /* Tombol Google digambar oleh pustaka Google sendiri; skripnya dimuat
    sekali saja dan hanya kalau memang dipakai. */
@@ -9056,6 +8859,8 @@ function adaPublik(){
     PENDAFTARAN_BUKA = awal.pendaftaran === true;
     if(awal.akun) mulaiDenyut();
     if(awal.masukLuar) MASUK_LUAR = awal.masukLuar;
+    if(Array.isArray(awal.paket)) PAKET = awal.paket;
+    if(awal.rekening) REKENING = awal.rekening;
     tanganiTiketSso();
     tanganiPulangGoogle();
     pindahBerkasLama();
