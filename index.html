@@ -1148,6 +1148,16 @@ input[type=file]{width:100%;padding:10px;border-radius:11px;border:1px dashed va
 .bayar-rinci{margin-top:4px;font-size:13px;font-weight:700;color:var(--redup)}
 .bukti-gambar{display:block;max-width:100%;margin-top:10px;border-radius:12px;border:1px solid var(--garis)}
 .profil-kisi{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:0 16px}
+.massal-bar{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-bottom:12px;
+  padding:11px 13px;border-radius:14px;border:1px solid var(--a2);background:rgba(var(--kaca),.6)}
+.massal-tipe{padding:6px 10px;border-radius:9px;border:1px solid var(--garis);
+  background:rgba(var(--kaca),.75);color:var(--tinta);font:700 13px/1.3 var(--f-teks)}
+.kartu-pilih{cursor:pointer;position:relative;padding-left:44px}
+.kartu-centang{position:absolute;left:14px;top:16px;width:22px;height:22px;border-radius:7px;
+  border:2px solid var(--garis);background:rgba(var(--kaca),.85);display:grid;place-items:center;
+  font:900 13px/1 var(--f-teks);color:var(--baik)}
+.kartu-terpilih{border-color:var(--a2);box-shadow:0 0 0 2px var(--a2)}
+.kartu-terpilih .kartu-centang{border-color:var(--baik);background:var(--baik-latar)}
 .saring-akses{margin-top:-6px}
 .saring-akses .pil b{font-weight:800}
 .kartu-kunci{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:100px;
@@ -2511,7 +2521,7 @@ function soalKeTeks(list){
 
 var ui = {view:"arsip", stase:"semua", tipe:"semua", akses:"semua", cari:"", entriId:null, kuis:null,
           catatanStase:null, catatanCari:"", tab:0, tabEntri:null, berkasStase:null,
-          kelola:"bayar"};
+          kelola:"bayar", massal:false, pilih:{}};
 var sunting = null;
 
 function sesi(){
@@ -3081,6 +3091,27 @@ function viewArsip(){
     h += '<div class="sepi-kotak"><b>' + esc(ui.cari ? "Tidak ada yang cocok" : T("kosongJudul")) + "</b><span>" +
          esc(ui.cari ? 'Coba kata kunci lain untuk "' + ui.cari + '".' : T("kosongIsi")) + "</span></div>";
   } else {
+    if(bisaTulis()){
+      h += '<div class="kotak-aksi" style="margin:0 0 12px">';
+      h += '<button class="t' + (ui.massal ? " utama" : "") + '" id="massalToggle" type="button">' +
+           (ui.massal ? "Selesai menyunting" : "Sunting massal") + "</button>";
+      if(ui.massal){
+        var nPilih = idTerpilih().length;
+        h += '<button class="t" id="massalSemua" type="button">Pilih semua</button>';
+        h += '<span class="bantu" style="align-self:center">' + nPilih + " dipilih</span>";
+      }
+      h += "</div>";
+      if(ui.massal){
+        h += '<div class="massal-bar">';
+        h += '<button class="t kcl" id="massalGratis" type="button">Jadikan gratis</button>';
+        h += '<button class="t kcl" id="massalBayar" type="button">Jadikan berbayar</button>';
+        h += '<select id="massalTipe" class="massal-tipe"><option value="">Ubah tipe\u2026</option>' +
+             TIPE_ENTRI.map(function(t){ return '<option value="' + t + '">' + esc(labelTipe(t)) + "</option>"; }).join("") +
+             "</select>";
+        h += '<button class="t kcl bahaya" id="massalHapus" type="button">Hapus</button>';
+        h += "</div>";
+      }
+    }
     h += '<div class="kartu-kisi">';
     list.forEach(function(e, i){ h += kartu(e, i); });
     h += "</div>";
@@ -3103,8 +3134,103 @@ function viewArsip(){
   });
   Array.prototype.forEach.call(panggung.querySelectorAll(".kartu"), function(b){
     b.addEventListener("click", function(){
+      // Dalam mode sunting massal, mengeklik kartu berarti memilih, bukan
+      // membuka \u2014 kalau tidak, memilih beberapa entri jadi mustahil.
+      if(ui.massal){
+        var id = b.dataset.id;
+        if(ui.pilih[id]) delete ui.pilih[id]; else ui.pilih[id] = true;
+        render();
+        return;
+      }
       ui.entriId = b.dataset.id; ui.view = "detail"; render(); window.scrollTo(0,0);
     });
+  });
+  pasangMassal();
+}
+
+function idTerpilih(){
+  return Object.keys(ui.pilih || {}).filter(function(k){ return ui.pilih[k]; });
+}
+
+/* Menyunting banyak entri sekaligus. Entri dikirim UTUH dengan satu kolom
+   diubah, bukan sebagian saja: server menyusun ulang entri dari muatan yang
+   dikirim, jadi mengirim potongan berarti isinya terhapus. */
+async function terapkanMassal(ubah){
+  var id = idTerpilih();
+  if(!id.length) return toast("Pilih dulu entrinya.");
+  var kirim = [];
+  id.forEach(function(x){
+    var e = cariEntri(x);
+    if(!e || e.terkunci) return;
+    kirim.push(Object.assign({}, e, ubah));
+  });
+  if(!kirim.length) return toast("Tidak ada entri yang bisa diubah.");
+
+  if(SERVER.ada){
+    var js = await srv("entriSimpan", {entri:kirim});
+    if(js.galat) return toast(js.galat);
+    if(js.arsip) pasangArsipServer(js.arsip);
+  } else {
+    kirim.forEach(function(baru){
+      for(var i = 0; i < db.entri.length; i++){ if(db.entri[i].id === baru.id) db.entri[i] = baru; }
+    });
+    simpan();
+  }
+  ui.pilih = {};
+  render();
+  toast(kirim.length + " entri diperbarui.");
+}
+
+function pasangMassal(){
+  var bt = document.getElementById("massalToggle");
+  if(bt) bt.addEventListener("click", function(){
+    ui.massal = !ui.massal;
+    ui.pilih = {};
+    render();
+  });
+
+  var bs = document.getElementById("massalSemua");
+  if(bs) bs.addEventListener("click", function(){
+    var l = entriTampak().filter(function(e){ return !e.terkunci; });
+    var semua = idTerpilih().length === l.length;
+    ui.pilih = {};
+    if(!semua) l.forEach(function(e){ ui.pilih[e.id] = true; });
+    render();
+  });
+
+  var bg = document.getElementById("massalGratis");
+  if(bg) bg.addEventListener("click", function(){ terapkanMassal({akses:"publik"}); });
+  var bb = document.getElementById("massalBayar");
+  if(bb) bb.addEventListener("click", function(){ terapkanMassal({akses:"terbatas"}); });
+
+  var btp = document.getElementById("massalTipe");
+  if(btp) btp.addEventListener("change", function(){
+    if(!btp.value) return;
+    var t = btp.value; btp.value = "";
+    terapkanMassal({tipe:t});
+  });
+
+  var bh = document.getElementById("massalHapus");
+  if(bh) bh.addEventListener("click", async function(){
+    var id = idTerpilih();
+    if(!id.length) return toast("Pilih dulu entrinya.");
+    if(!await tanya("Hapus " + id.length + " entri?",
+          "Tindakan ini tidak bisa dibatalkan. Isi, soal, dan lampirannya ikut hilang.",
+          {ok:"Hapus semua", bahaya:true})) return;
+    var gagal = 0;
+    for(var i = 0; i < id.length; i++){
+      if(SERVER.ada){
+        var jh = await srv("entriHapus", {id:id[i]});
+        if(jh.galat){ gagal++; continue; }
+        if(jh.arsip) pasangArsipServer(jh.arsip);
+      } else {
+        db.entri = db.entri.filter(function(x){ return x.id !== id[i]; });
+      }
+    }
+    if(!SERVER.ada) simpan();
+    ui.pilih = {};
+    render();
+    toast((id.length - gagal) + " entri dihapus" + (gagal ? ", " + gagal + " ditolak" : "") + ".");
   });
 }
 
@@ -3119,7 +3245,12 @@ function cincin(s, n){
 function kartu(e, i){
   var st = cariStase(e.stase);
   var sk = skorSaya()[e.id];
-  var h = '<article class="kartu kaca" data-id="' + esc(e.id) + '" tabindex="0" role="button" style="animation-delay:' + Math.min(i*40, 400) + 'ms">';
+  var terpilih = ui.massal && ui.pilih[e.id] === true;
+  var h = '<article class="kartu kaca' + (ui.massal ? " kartu-pilih" : "") + (terpilih ? " kartu-terpilih" : "") +
+          '" data-id="' + esc(e.id) + '" tabindex="0" role="' + (ui.massal ? "checkbox" : "button") + '"' +
+          (ui.massal ? ' aria-checked="' + (terpilih ? "true" : "false") + '"' : "") +
+          ' style="animation-delay:' + Math.min(i*40, 400) + 'ms">';
+  if(ui.massal) h += '<span class="kartu-centang" aria-hidden="true">' + (terpilih ? "\u2713" : "") + "</span>";
   h += '<div class="kartu-atas">';
   h += '<span class="tag-stase" style="--h:' + st.h + '"><span class="titik"></span>' + esc(st.kode) + "</span>";
   h += '<span class="tipe-pil">' + esc(labelTipe(e.tipe)) + "</span>";
