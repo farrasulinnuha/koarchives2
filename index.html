@@ -7057,7 +7057,7 @@ function viewPaket(){
     h += '<section class="kotak kaca"><h2>Kirim bukti transfer</h2>';
     h += '<div id="bayarPunyaku"></div>';
     h += '<div class="b"><label for="bayarPaket">Paket yang dibayar</label><select id="bayarPaket">' +
-         PAKET.map(function(p){ return '<option value="' + esc(p.id) + '">' + esc(p.nama) + " \\u00B7 " + esc(rupiah(p.harga)) + "</option>"; }).join("") +
+         PAKET.map(function(p){ return '<option value="' + esc(p.id) + '">' + esc(p.nama) + " \u00B7 " + esc(rupiah(p.harga)) + "</option>"; }).join("") +
          "</select></div>";
     h += '<div class="b"><label for="bayarBukti">Foto atau tangkapan layar bukti transfer</label>';
     h += '<input type="file" id="bayarBukti" accept="image/*">';
@@ -7098,11 +7098,11 @@ function pasangPaket(){
       if(!el || j.galat || !(j.antre || []).length) return;
       el.innerHTML = j.antre.map(function(x){
         var warna = x.status === "diterima" ? "var(--baik)" : x.status === "ditolak" ? "var(--buruk)" : "var(--tunggu)";
-        return '<div class="uji-baris"><span class="uji-nama">' + esc(x.paketNama) + " \\u00B7 " +
+        return '<div class="uji-baris"><span class="uji-nama">' + esc(x.paketNama) + " \u00B7 " +
                esc(String(x.waktu).slice(0,10)) + "</span>" +
                '<span class="uji-nilai" style="color:' + warna + '">' + esc(x.status) +
-               (x.berlakuSampai ? " \\u00B7 sampai " + esc(x.berlakuSampai) : "") +
-               (x.alasan ? " \\u00B7 " + esc(x.alasan) : "") + "</span></div>";
+               (x.berlakuSampai ? " \u00B7 sampai " + esc(x.berlakuSampai) : "") +
+               (x.alasan ? " \u00B7 " + esc(x.alasan) : "") + "</span></div>";
       }).join("");
     });
   }
