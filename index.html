@@ -4330,6 +4330,9 @@ function viewEditor(){
            ' aria-label="Naikkan tab ' + (i + 1) + '">\u2191</button>';
       h += '<button class="t kcl" type="button" data-bag-turun="' + i + '"' +
            (i === p.bagian.length - 1 ? " disabled" : "") + ' aria-label="Turunkan tab ' + (i + 1) + '">\u2193</button>';
+      h += '<button class="t kcl" type="button" data-bag-lebur="' + i + '"' + (i === 0 ? " disabled" : "") +
+           ' title="Gabungkan tab ini ke tab di atasnya" aria-label="Gabungkan tab ' + (i + 1) +
+           ' ke tab di atasnya">\u2934 Gabung</button>';
       h += '<button class="t kcl" type="button" data-bag-buang="' + i + '" aria-label="Hapus tab ' + (i + 1) + '">Hapus</button>';
       h += "</div>";
       h += '<textarea class="bag-isi" aria-label="Sumber tab ' + (i + 1) + '" hidden>' +
@@ -4360,6 +4363,36 @@ function viewEditor(){
     Array.prototype.forEach.call(kotakTab.querySelectorAll("[data-bag-turun]"), function(b){
       b.addEventListener("click", function(){ tukar(Number(b.dataset.bagTurun), Number(b.dataset.bagTurun) + 1); });
     });
+    /* Menggabungkan tab ke tab di atasnya. Judul tab yang dilebur tetap
+       disimpan sebagai sub-judul, supaya batas materinya tidak lenyap dan
+       isinya tidak menyatu jadi satu blok tanpa penanda. */
+    Array.prototype.forEach.call(kotakTab.querySelectorAll("[data-bag-lebur]"), function(b){
+      b.addEventListener("click", async function(){
+        var bag = pecahBagian(taIsi.value);
+        var i = Number(b.dataset.bagLebur);
+        if(i < 1 || i >= bag.bagian.length) return;
+        var atas = bag.bagian[i - 1];
+        var ini = bag.bagian[i];
+        if(!await tanya("Gabungkan tab ini ke atasnya?",
+              "\u201C" + ini.judul + "\u201D akan masuk ke dalam \u201C" + atas.judul +
+              "\u201D sebagai sub-bagian. Lampiran yang menempel di tab ini ikut berpindah.",
+              {ok:"Gabungkan"})) return;
+
+        atas.isi = (atas.isi || "").replace(/\s+$/, "") +
+          (ini.isi.trim() || ini.judul ? "\n\n### " + ini.judul + "\n" + (ini.isi || "").trim() : "");
+        bag.bagian.splice(i, 1);
+        taIsi.value = (bag.pengantar ? bag.pengantar + "\n\n" : "") +
+          bag.bagian.map(function(x){ return "## " + x.judul + "\n" + x.isi; }).join("\n\n");
+
+        // Lampiran ikut pindah ke tab penampungnya, kalau tidak ia jadi
+        // yatim dan hilang dari tampilan entri.
+        lamKerja.forEach(function(l){ if(l.bagian === ini.judul) l.bagian = atas.judul; });
+
+        gambarKotakTab(); segarkanDaftarTab(); gambarLamSunting();
+        toast("Tab digabung ke \u201C" + atas.judul + "\u201D.");
+      });
+    });
+
     Array.prototype.forEach.call(kotakTab.querySelectorAll("[data-bag-buang]"), function(b){
       b.addEventListener("click", async function(){
         var bag = pecahBagian(taIsi.value);
