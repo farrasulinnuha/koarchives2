@@ -1147,6 +1147,7 @@ input[type=file]{width:100%;padding:10px;border-radius:11px;border:1px dashed va
 .bayar-kepala{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:15px}
 .bayar-rinci{margin-top:4px;font-size:13px;font-weight:700;color:var(--redup)}
 .bukti-gambar{display:block;max-width:100%;margin-top:10px;border-radius:12px;border:1px solid var(--garis)}
+.profil-kisi{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:0 16px}
 .saring-akses{margin-top:-6px}
 .saring-akses .pil b{font-weight:800}
 .kartu-kunci{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:100px;
@@ -2617,7 +2618,7 @@ function kunciPribadi(){ return KUNCI + "/pribadi/" + (penggunaAkun() || "tamu")
 
 function pribadiKosong(){
   return {latar:null, latarBuram:0, latarGelap:45, tema:null, ipk:null, skor:{}, klarifikasi:[],
-          agenda:[], agendaSelesai:{}, catatan:[], berkas:[], berkasSelesai:{}};
+          agenda:[], agendaSelesai:{}, catatan:[], berkas:[], berkasSelesai:{}, skalaFont:1};
 }
 
 function muatPribadi(){
@@ -2768,6 +2769,28 @@ function terapkanIkon(){
     document.head.appendChild(tautan);
   }
   tautan.href = db.ikon;
+}
+
+/* Ukuran huruf per akun. Dipakai zoom, bukan font-size, karena seluruh gaya
+   di berkas ini memakai satuan px \u2014 mengubah font-size akar tidak menggeser
+   apa pun, sedangkan zoom ikut membesarkan jarak dan kotaknya, jadi tata
+   letaknya tetap seimbang. */
+var SKALA_FONT = [
+  {n:0.9,  nm:"Kecil"},
+  {n:1,    nm:"Normal"},
+  {n:1.15, nm:"Besar"},
+  {n:1.3,  nm:"Lebih besar"},
+  {n:1.5,  nm:"Sangat besar"}
+];
+
+function skalaFont(){
+  var n = Number(pribadi && pribadi.skalaFont);
+  return n >= 0.8 && n <= 1.6 ? n : 1;
+}
+
+function terapkanFont(){
+  var n = skalaFont();
+  document.body.style.zoom = n === 1 ? "" : String(n);
 }
 
 function terapkanTema(ubahMode){
@@ -5700,6 +5723,17 @@ async function simpanImpor(hasil){
    12a. Tampilan pribadi tiap akun
    ===================================================================== */
 
+function pasangSkalaFont(){
+  Array.prototype.forEach.call(panggung.querySelectorAll("[data-skala]"), function(b){
+    b.addEventListener("click", function(){
+      pribadi.skalaFont = Number(b.dataset.skala);
+      simpanPribadi();
+      terapkanFont();
+      render();
+    });
+  });
+}
+
 function pasangProfil(){
   var bs = document.getElementById("pfSimpan");
   if(!bs) return;
@@ -5742,6 +5776,44 @@ function viewTampilan(){
   h += '<section class="lembar kaca"><h1 class="judul-besar">Tampilan</h1>';
   h += '<p style="color:var(--redup);font-size:14px;margin:10px 0 0;max-width:60ch">Pengaturan di halaman ini hanya berlaku untuk ' +
        esc(namaAkun() ? "akun " + namaAkun() : "kamu") + ' di browser ini. Akun lain punya tampilannya sendiri.</p></section>';
+
+  h += '<section class="kotak kaca"><h2>Ukuran huruf</h2>';
+  h += "<p>Membesarkan seluruh tampilan, bukan cuma tulisannya, jadi tombol dan jaraknya ikut nyaman ditekan. Tersimpan di akunmu.</p>";
+  h += '<div class="saring" style="margin-top:14px">';
+  SKALA_FONT.forEach(function(f){
+    h += '<button class="pil" type="button" data-skala="' + f.n + '" aria-pressed="' +
+         (skalaFont() === f.n ? "true" : "false") + '"><span style="font-size:' +
+         Math.round(13 * f.n) + 'px">A</span> ' + esc(f.nm) + "</button>";
+  });
+  h += "</div></section>";
+
+  if(SERVER.ada && penggunaAkun()){
+    var pf = SERVER.akun || {};
+    h += '<section class="kotak kaca"><h2>Profil akun</h2>';
+    h += "<p><b>Nama panggilan</b> dan <b>grup koas</b> terlihat pengelola arsip; sisanya hanya kamu dan pemilik yang bisa melihat.</p>";
+    h += '<div class="profil-kisi">';
+    [["pfNama","Nama panggilan", pf.nama || "", "yang muncul di jadwal bersama"],
+     ["pfUniv","Universitas", pf.universitas || "", "mis. Universitas Gadjah Mada"],
+     ["pfAngkatan","Angkatan", pf.angkatan || "", "mis. 2022"],
+     ["pfGrup","Grup koas", pf.grup || "", "mis. Kelompok B4"],
+     ["pfNim","NIM", pf.nim || "", "boleh dikosongkan"],
+     ["pfStase","Stase sekarang", pf.staseKini || "", "mis. Ilmu Penyakit Dalam"],
+     ["pfRs","Rumah sakit sekarang", pf.rsKini || "", "mis. RSUP Dr. Sardjito"],
+     ["pfTelepon","Nomor WhatsApp", pf.telepon || "", "boleh dikosongkan"]
+    ].forEach(function(f){
+      h += '<div class="b"><label for="' + f[0] + '">' + esc(f[1]) + "</label>";
+      h += '<input id="' + f[0] + '" type="text" value="' + esc(f[2]) +
+           '" placeholder="' + esc(f[3]) + '"></div>';
+    });
+    h += "</div>";
+    h += '<div class="b"><label for="pfBio">Catatan singkat</label>';
+    h += '<textarea id="pfBio" style="min-height:70px" placeholder="Bebas \u2014 minat, rencana PPDS, atau apa pun.">' +
+         esc(pf.bio || "") + "</textarea></div>";
+    h += '<div class="kotak-aksi"><button class="t utama" id="pfSimpan" type="button">Simpan profil</button>';
+    h += '<button class="t" id="pfSandi" type="button">Ganti sandi</button>';
+    h += '<span id="pfKabar" class="bantu" style="align-self:center"></span></div>';
+    h += "</section>";
+  }
 
   h += '<section class="kotak kaca"><h2>Gambar latar</h2>';
   h += "<p>Pilih foto dari perangkatmu. Gambarnya otomatis dikecilkan supaya muat di penyimpanan browser.</p>";
@@ -5802,6 +5874,7 @@ function viewTampilan(){
   panggung.innerHTML = h;
   pasangCari();
   pasangProfil();
+  pasangSkalaFont();
   if(!bisaTulis()) pasangKlarifikasi();
 
   var berkas = document.getElementById("latarBerkas");
@@ -5828,6 +5901,7 @@ function viewTampilan(){
     pribadi.latar = null;
     simpanPribadi();
     terapkanTema();
+    terapkanFont();
     render();
     toast("Latar dihapus.");
   });
@@ -8746,6 +8820,7 @@ function layarKunci(pesanAwal){
     g.remove();
     document.querySelector(".app").style.display = "";
     terapkanTema();
+    terapkanFont();
     render();
     toast("Menampilkan materi gratis.");
   });
@@ -8894,6 +8969,7 @@ function layarKunci(pesanAwal){
     g.remove();
     document.querySelector(".app").style.display = "";
     terapkanTema();
+    terapkanFont();
     render();
     toast("Sandi diganti. Selamat datang kembali.");
   });
@@ -8942,6 +9018,7 @@ function layarKunci(pesanAwal){
     g.remove();
     document.querySelector(".app").style.display = "";
     terapkanTema();
+    terapkanFont();
     render();
     toast("Selamat datang, " + (hasil.nama || hasil.pengguna) + ".");
   });
@@ -9256,6 +9333,7 @@ async function tanganiPulangGoogle(){
   if(gerbang) gerbang.remove();
   document.querySelector(".app").style.display = "";
   terapkanTema();
+  terapkanFont();
   render();
   toast("Selamat datang, " + (j.akun.nama || j.akun.pengguna) + ".");
 }
@@ -9271,6 +9349,7 @@ async function masukDenganGoogle(kredensial, galatEl, tutup){
   if(tutup) tutup();
   document.querySelector(".app").style.display = "";
   terapkanTema();
+  terapkanFont();
   render();
   toast("Selamat datang, " + (j.akun.nama || j.akun.pengguna) + ".");
 }
@@ -9293,6 +9372,7 @@ async function tanganiTiketSso(){
   if(gerbang) gerbang.remove();
   document.querySelector(".app").style.display = "";
   terapkanTema();
+  terapkanFont();
   render();
   toast("Selamat datang, " + (j.akun.nama || j.akun.pengguna) + ".");
 }
@@ -9387,6 +9467,7 @@ function layarMasuk(pesanAwal){
     g.remove();
     document.querySelector(".app").style.display = "";
     terapkanTema();
+    terapkanFont();
     render();
     toast(modeDaftar
       ? "Akun dibuat. Selamat datang, " + (j.akun.nama || j.akun.pengguna) + "."
